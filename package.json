@@ -64,7 +64,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rod-higgins/fat-zebra.git"
+    "url": "https://github.com/rod-higgins/fat-zebra-nextjs.git"
   },
   "bugs": {
     "url": "https://github.com/rod-higgins/fat-zebra-nextjs/issues"
@@ -89,8 +89,8 @@
     "@types/node": "^20.0.0",
     "@types/react": "^18.0.0",
     "@types/react-dom": "^18.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.37.0",
+    "@typescript-eslint/parser": "^8.37.0",
     "eslint": "^8.0.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-react": "^7.0.0",
