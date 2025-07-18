@@ -16,9 +16,9 @@ A comprehensive TypeScript library for integrating Fat Zebra payment gateway wit
 ## Installation
 
 ```bash
-npm install @your-org/fat-zebra-nextjs @fat-zebra/sdk
+npm install @fwc/fat-zebra-nextjs @fat-zebra/sdk
 # or
-yarn add @your-org/fat-zebra-nextjs @fat-zebra/sdk
+yarn add @fwc/fat-zebra-nextjs @fat-zebra/sdk
 ```
 
 ## Quick Start
