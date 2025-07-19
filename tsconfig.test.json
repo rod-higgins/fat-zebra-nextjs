@@ -1,4 +1,5 @@
 {
+  "extends": "./tsconfig.json",
   "compilerOptions": {
     "target": "ES2020",
     "lib": [
@@ -13,19 +14,18 @@
     "strict": true,
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
-    "module": "ESNext",
+    "module": "CommonJS",
     "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "./dist",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
     "removeComments": false,
-    "incremental": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "incremental": false,
+    "tsBuildInfoFile": null,
     
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -34,8 +34,8 @@
     "strictPropertyInitialization": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": false,
@@ -58,11 +58,12 @@
     "skipDefaultLibCheck": true,
     "useDefineForClassFields": true,
     
-    // Allow optional imports that might not exist
-    "moduleDetection": "auto"
+    "types": ["jest", "node", "@testing-library/jest-dom"]
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "tests/**/*",
+    "tests/types/**/*"
   ],
   "exclude": [
     "node_modules",
@@ -71,23 +72,6 @@
     "coverage",
     ".next",
     "out",
-    "tests",
-    "examples",
-    "**/*.test.ts",
-    "**/*.test.tsx",
-    "**/*.spec.ts",
-    "**/*.spec.tsx",
-    // Conditionally exclude Next.js specific files if Next.js is not available
-    "src/server/routes-nextjs.ts",
-    "src/server/routes/payments/route.ts",
-    "src/server/routes/payments/[id]/refund/route.ts",
-    "src/server/routes/payments/tokenize/route.ts",
-    "src/server/routes/index.ts"
-  ],
-  "ts-node": {
-    "compilerOptions": {
-      "module": "CommonJS",
-      "verbatimModuleSyntax": false
-    }
-  }
+    "examples"
+  ]
 }

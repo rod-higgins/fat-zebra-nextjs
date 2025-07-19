@@ -3,13 +3,13 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PaymentForm } from '../../src/components/PaymentForm';
 import { PaymentFormProps } from '../../src/types';
-import { createMockCardDetails } from '../setup';
+import { createMockCardDetails } from '../../tests/setup';
 
 // Mock the Fat Zebra SDK import
 jest.mock('@fat-zebra/sdk', () => ({
   FatZebra: jest.fn().mockImplementation(() => ({
     on: jest.fn(),
-    verify: jest.fn().mockResolvedValue({
+    verify: jest.fn().mockResolvedValue({+
       successful: true,
       data: {
         eci: '05',

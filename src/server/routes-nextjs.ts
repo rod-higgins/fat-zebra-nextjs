@@ -1,6 +1,6 @@
 /**
- * Fat Zebra Server Routes Module
- * Next.js API route handlers for Fat Zebra payment operations
+ * Next.js specific server routes
+ * Only loaded when Next.js is available
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -14,7 +14,7 @@ import type {
   VerificationHashData,
 } from '../types';
 
-// Helper function to get client IP from request
+// Helper function to get client IP from Next.js request
 function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   const realIP = request.headers.get('x-real-ip');
@@ -36,7 +36,7 @@ function getClientIP(request: NextRequest): string {
 }
 
 /**
- * Purchase transaction handler
+ * Purchase transaction handler for Next.js
  */
 export async function handlePurchase(request: NextRequest): Promise<NextResponse> {
   try {
@@ -54,8 +54,8 @@ export async function handlePurchase(request: NextRequest): Promise<NextResponse
 
     const customerIp = getClientIP(request);
     const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
+      username: process.env.FATZEBRA_USERNAME!,
+      token: process.env.FATZEBRA_TOKEN!,
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
@@ -90,7 +90,7 @@ export async function handlePurchase(request: NextRequest): Promise<NextResponse
 }
 
 /**
- * Authorization transaction handler
+ * Authorization transaction handler for Next.js
  */
 export async function handleAuthorization(request: NextRequest): Promise<NextResponse> {
   try {
@@ -98,8 +98,8 @@ export async function handleAuthorization(request: NextRequest): Promise<NextRes
 
     const customerIp = getClientIP(request);
     const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
+      username: process.env.FATZEBRA_USERNAME!,
+      token: process.env.FATZEBRA_TOKEN!,
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
@@ -122,7 +122,7 @@ export async function handleAuthorization(request: NextRequest): Promise<NextRes
 }
 
 /**
- * Capture transaction handler
+ * Capture transaction handler for Next.js
  */
 export async function handleCapture(request: NextRequest): Promise<NextResponse> {
   try {
@@ -136,8 +136,8 @@ export async function handleCapture(request: NextRequest): Promise<NextResponse>
     }
 
     const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
+      username: process.env.FATZEBRA_USERNAME!,
+      token: process.env.FATZEBRA_TOKEN!,
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
@@ -153,7 +153,7 @@ export async function handleCapture(request: NextRequest): Promise<NextResponse>
 }
 
 /**
- * Refund transaction handler
+ * Refund transaction handler for Next.js
  */
 export async function handleRefund(request: NextRequest): Promise<NextResponse> {
   try {
@@ -167,8 +167,8 @@ export async function handleRefund(request: NextRequest): Promise<NextResponse> 
     }
 
     const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
+      username: process.env.FATZEBRA_USERNAME!,
+      token: process.env.FATZEBRA_TOKEN!,
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
@@ -184,7 +184,7 @@ export async function handleRefund(request: NextRequest): Promise<NextResponse> 
 }
 
 /**
- * Tokenization handler
+ * Tokenization handler for Next.js
  */
 export async function handleTokenization(request: NextRequest): Promise<NextResponse> {
   try {
@@ -198,8 +198,8 @@ export async function handleTokenization(request: NextRequest): Promise<NextResp
     }
 
     const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
+      username: process.env.FATZEBRA_USERNAME!,
+      token: process.env.FATZEBRA_TOKEN!,
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
@@ -215,7 +215,7 @@ export async function handleTokenization(request: NextRequest): Promise<NextResp
 }
 
 /**
- * Void transaction handler
+ * Void transaction handler for Next.js
  */
 export async function handleVoid(request: NextRequest): Promise<NextResponse> {
   try {
@@ -229,8 +229,8 @@ export async function handleVoid(request: NextRequest): Promise<NextResponse> {
     }
 
     const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
+      username: process.env.FATZEBRA_USERNAME!,
+      token: process.env.FATZEBRA_TOKEN!,
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
@@ -246,7 +246,7 @@ export async function handleVoid(request: NextRequest): Promise<NextResponse> {
 }
 
 /**
- * Transaction status handler
+ * Transaction status handler for Next.js
  */
 export async function handleTransactionStatus(request: NextRequest): Promise<NextResponse> {
   try {
@@ -261,8 +261,8 @@ export async function handleTransactionStatus(request: NextRequest): Promise<Nex
     }
 
     const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
+      username: process.env.FATZEBRA_USERNAME!,
+      token: process.env.FATZEBRA_TOKEN!,
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
@@ -278,14 +278,59 @@ export async function handleTransactionStatus(request: NextRequest): Promise<Nex
 }
 
 /**
- * Webhook verification handler
+ * Generate verification hash handler for Next.js
+ */
+export async function handleGenerateHash(request: NextRequest): Promise<NextResponse> {
+  try {
+    const { amount, currency, reference, timestamp, card_token } = await request.json();
+
+    if (!amount || !currency || !reference || !timestamp) {
+      return NextResponse.json(
+        { successful: false, errors: ['Missing required fields for hash generation'] },
+        { status: 400 }
+      );
+    }
+
+    const sharedSecret = process.env.FATZEBRA_SHARED_SECRET;
+    if (!sharedSecret) {
+      return NextResponse.json(
+        { successful: false, errors: ['Shared secret not configured'] },
+        { status: 500 }
+      );
+    }
+
+    const hashData: VerificationHashData = {
+      amount,
+      currency,
+      reference,
+      timestamp,
+      ...(card_token && { card_token }),
+    };
+
+    const hash = generateVerificationHash(hashData, sharedSecret);
+
+    return NextResponse.json({
+      successful: true,
+      hash,
+      timestamp,
+    });
+  } catch (error) {
+    const errorMessage = extractErrorMessage(error);
+    return NextResponse.json(
+      { successful: false, errors: [errorMessage] },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Webhook signature verification for Next.js
  */
 export async function handleVerifyWebhook(request: NextRequest): Promise<NextResponse> {
   try {
-    // Note: body parsing removed as it's not currently used in the basic implementation
-    // In a full implementation, the body would be used for signature verification
-    const signature = request.headers.get('x-webhook-signature');
-
+    const body = await request.json();
+    const signature = request.headers.get('x-fatzebra-signature');
+    
     if (!signature) {
       return NextResponse.json(
         { successful: false, errors: ['Missing webhook signature'] },
@@ -293,59 +338,44 @@ export async function handleVerifyWebhook(request: NextRequest): Promise<NextRes
       );
     }
 
-    // Verify webhook signature logic would go here
-    // For now, return success
+    // TODO: Implement actual webhook signature verification
+    // This is a placeholder - implement according to Fat Zebra's webhook documentation
+    
     return NextResponse.json({
       successful: true,
       verified: true,
+      event: body,
     });
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
-    return NextResponse.json({ successful: false, errors: [errorMessage] }, { status: 500 });
+    return NextResponse.json(
+      { successful: false, errors: [errorMessage] },
+      { status: 500 }
+    );
   }
 }
 
 /**
- * Generate verification hash handler
+ * Health check handler for Next.js
  */
-export async function handleGenerateHash(request: NextRequest): Promise<NextResponse> {
+export async function handleHealthCheck(request: NextRequest): Promise<NextResponse> {
   try {
-    const body: VerificationHashData = await request.json();
-
-    if (!body.amount || !body.currency || !body.reference || !body.timestamp) {
-      return NextResponse.json(
-        { successful: false, errors: ['Missing required hash data'] },
-        { status: 400 }
-      );
-    }
-
-    const secret = process.env.FAT_ZEBRA_SHARED_SECRET || 'default-secret';
-    const hash = generateVerificationHash(body, secret);
-
     return NextResponse.json({
-      successful: true,
-      hash,
+      status: 'healthy',
+      service: 'fat-zebra-nextjs',
+      version: '0.3.7',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      framework: 'nextjs',
     });
   } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return NextResponse.json({ successful: false, errors: [errorMessage] }, { status: 500 });
+    return NextResponse.json(
+      { status: 'unhealthy', error: extractErrorMessage(error) },
+      { status: 500 }
+    );
   }
 }
 
-/**
- * Health check handler (removed unused request parameter)
- */
-export async function handleHealthCheck(): Promise<NextResponse> {
-  return NextResponse.json({
-    successful: true,
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    version: '0.3.7',
-  });
-}
-
-/**
- * Default route configuration
- */
+// Export configuration for Next.js
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

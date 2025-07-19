@@ -3,9 +3,10 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  setupFiles: ['<rootDir>/tests/env.setup.ts'],
   
-  // Module path mapping
-  moduleNameMapping: {
+  // Module path mapping - FIXED: moduleNameMapping -> moduleNameMapper
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@/components/(.*)$': '<rootDir>/src/components/$1',
     '^@/hooks/(.*)$': '<rootDir>/src/hooks/$1',
@@ -57,12 +58,12 @@ module.exports = {
   
   coverageDirectory: 'coverage',
   
-  // Transform configuration
+  // FIXED: Updated transform configuration to use new ts-jest syntax
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
-      tsconfig: {
-        jsx: 'react-jsx'
-      }
+      tsconfig: './tsconfig.test.json',
+      useESM: false,
+      isolatedModules: true
     }],
     '^.+\\.(js|jsx)$': 'babel-jest',
   },
@@ -83,25 +84,14 @@ module.exports = {
   testTimeout: 10000,
   maxWorkers: '50%',
   
-  // Environment setup
-  setupFiles: ['<rootDir>/tests/env.setup.ts'],
-  
-  // TypeScript configuration
-  globals: {
-    'ts-jest': {
-      useESM: false,
-      tsconfig: {
-        jsx: 'react-jsx'
-      }
-    },
-  },
-  
   // Module directories
   moduleDirectories: ['node_modules', '<rootDir>/src'],
   
-  // Extensions to resolve
-  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  // REMOVED: Deprecated globals configuration
+  // REMOVED: extensionsToTreatAsEsm configuration that was causing conflicts
   
-  // ESM support
-  extensionsToTreatAsEsm: ['.ts', '.tsx'],
+  // Test environment options
+  testEnvironmentOptions: {
+    url: 'http://localhost:3000'
+  }
 };

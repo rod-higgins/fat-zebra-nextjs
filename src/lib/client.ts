@@ -111,7 +111,9 @@ export class FatZebraClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Authorization: `Basic ${Buffer.from(`${this.config.username}:${this.config.token}`).toString('base64')}`,
+      Authorization: `Basic ${Buffer.from(`${this.config.username}:${this.config.token}`).toString(
+        'base64'
+      )}`,
       'User-Agent': 'FatZebra Next.js v0.2.2',
     };
 

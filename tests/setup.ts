@@ -1,109 +1,110 @@
-import '@testing-library/jest-dom';
-import { TextEncoder, TextDecoder } from 'util';
+// tests/setup.ts - Test setup for Jest - CommonJS syntax to avoid ESM/CommonJS conflicts
 
-// Polyfill for TextEncoder/TextDecoder
-global.TextEncoder = TextEncoder;
-global.TextDecoder = TextDecoder as any;
+// Set up global polyfills for Node.js environment only if they don't exist
+if (typeof global.TextEncoder === 'undefined') {
+  const { TextEncoder } = require('util');
+  global.TextEncoder = TextEncoder;
+}
 
-// Mock fetch globally
-global.fetch = jest.fn();
+if (typeof global.TextDecoder === 'undefined') {
+  const { TextDecoder } = require('util');
+  global.TextDecoder = TextDecoder;
+}
 
-// Mock crypto for Node.js environment
-Object.defineProperty(global, 'crypto', {
-  value: {
-    subtle: {
-      importKey: jest.fn(),
-      sign: jest.fn(),
-    },
-    getRandomValues: jest.fn((arr: any) => {
-      for (let i = 0; i < arr.length; i++) {
-        arr[i] = Math.floor(Math.random() * 256);
-      }
-      return arr;
-    }),
-  },
-});
-
-// Mock window object for browser-specific tests
-Object.defineProperty(global, 'window', {
-  value: {
-    crypto: global.crypto,
-  },
-  writable: true,
-});
-
-// Mock btoa/atob for base64 encoding
-global.btoa = (str: string) => Buffer.from(str, 'binary').toString('base64');
-global.atob = (str: string) => Buffer.from(str, 'base64').toString('binary');
-
-// Helper function to mock fetch responses
-export const mockFetchResponse = (data: any, ok: boolean = true, status: number = 200) => {
-  (global.fetch as jest.Mock).mockResolvedValueOnce({
+// Helper function to create proper Response mock
+const createMockResponse = (data: any, ok: boolean = true, status: number = 200): Response => {
+  const response = {
     ok,
     status,
-    json: async () => data,
-    text: async () => JSON.stringify(data),
+    statusText: ok ? 'OK' : 'Error',
     headers: new Headers(),
-  });
+    redirected: false,
+    type: 'basic' as ResponseType,
+    url: '',
+    body: null,
+    bodyUsed: false,
+    json: jest.fn().mockResolvedValue(data),
+    text: jest.fn().mockResolvedValue(JSON.stringify(data)),
+    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
+    blob: jest.fn().mockResolvedValue(new Blob()),
+    formData: jest.fn().mockResolvedValue(new FormData()),
+    clone: jest.fn(),
+    bytes: jest.fn().mockResolvedValue(new Uint8Array())
+  };
+
+  // Set up clone to return a copy of the response after it's created
+  response.clone = jest.fn().mockReturnValue({ ...response });
+
+  return response as unknown as Response;
 };
 
-// Helper function to mock fetch errors
-export const mockFetchError = (error: Error) => {
-  (global.fetch as jest.Mock).mockRejectedValueOnce(error);
-};
+// Mock fetch for testing with proper Response interface implementation
+global.fetch = jest.fn(() => Promise.resolve(createMockResponse({})));
 
-// Helper function to create mock purchase request
-export const createMockPurchaseRequest = () => ({
-  amount: 10.00,
-  currency: 'AUD',
-  reference: 'TEST-REF-123',
-  card_details: {
-    card_holder: 'John Doe',
-    card_number: '4005550000000001',
-    card_expiry: '12/25',
-    cvv: '123'
+// Mock Response constructor
+Object.defineProperty(global, 'Response', {
+  value: function MockResponse(body?: BodyInit | null, init?: ResponseInit) {
+    return createMockResponse(
+      typeof body === 'string' ? JSON.parse(body) : body,
+      (init?.status || 200) < 400,
+      init?.status || 200
+    );
   },
+  writable: true
+});
+
+// Helper function to mock fetch responses
+const mockFetchResponse = (data: any, ok: boolean = true, status: number = 200) => {
+  return Promise.resolve(createMockResponse(data, ok, status));
+};
+
+const mockFetchError = (error: Error) => {
+  return Promise.reject(error);
+};
+
+const createMockPurchaseRequest = () => ({
+  amount: 2500, // $25.00 in cents
+  currency: 'AUD',
+  card_number: '4005550000000001',
+  card_expiry: '12/25',
+  cvv: '123',
+  card_holder: 'John Doe',
+  reference: 'TEST-' + Date.now(),
+  customer_ip: '127.0.0.1',
   customer: {
     first_name: 'John',
     last_name: 'Doe',
-    email: 'john@example.com'
+    email: 'john.doe@example.com',
+    phone: '+61400000000'
   }
 });
 
-// Helper function to create mock transaction response
-export const createMockTransactionResponse = () => ({
+const createMockTransactionResponse = () => ({
   successful: true,
   response: {
-    id: 'txn-123456',
-    amount: 10.00,
+    id: 'txn_' + Date.now(),
+    amount: 2500,
     currency: 'AUD',
-    reference: 'TEST-REF-123',
-    successful: true,
+    reference: 'TEST-' + Date.now(),
     message: 'Approved',
-    authorization: 'AUTH123456',
-    card: {
-      token: 'card-token-123',
-      display_number: '4005...0001',
-      scheme: 'visa',
-      expiry_month: 12,
-      expiry_year: 2025
-    },
-    settlement: {
-      date: '2024-01-15'
-    },
-    transaction_fee: 0.30,
-    acquirer_response: {
-      code: '00',
-      message: 'Approved'
-    }
+    successful: true,
+    settlement_date: new Date().toISOString().split('T')[0],
+    transaction_id: 'txn_' + Date.now(),
+    card_holder: 'John Doe',
+    card_number: '4005***********0001',
+    card_type: 'Visa',
+    authorization: '123456',
+    captured: true,
+    created_at: new Date().toISOString()
   },
+  errors: [],
   test: true
 });
 
-// Helper function to create mock error response
-export const createMockErrorResponse = (message: string = 'Test error', errors: string[] = []) => ({
+const createMockErrorResponse = (message: string = 'Test error', errors: string[] = []) => ({
   successful: false,
-  errors: errors.length > 0 ? errors : [message],
+  response: null,
+  errors: [message, ...errors],
   message,
   test: true
 });
@@ -162,12 +163,11 @@ expect.extend({
   },
 });
 
-// Type declarations for custom matchers
-declare global {
-  namespace jest {
-    interface Matchers<R> {
-      toBeValidCardNumber(): R;
-      toBeValidEmail(): R;
-    }
-  }
-}
+// Export helper functions using CommonJS syntax
+module.exports = {
+  mockFetchResponse,
+  mockFetchError,
+  createMockPurchaseRequest,
+  createMockTransactionResponse,
+  createMockErrorResponse
+};

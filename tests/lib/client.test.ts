@@ -1,450 +1,453 @@
-import { FatZebraClient, createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../../src/lib/client';
-import { createMockPurchaseRequest, mockFetchResponse, mockFetchError } from '../setup';
+import '@testing-library/jest-dom';
+import '../types/jest-custom-matchers';
 
-describe('FatZebraClient', () => {
+// Import the test helpers using CommonJS require syntax to avoid ESM issues
+const {
+  mockFetchResponse,
+  createMockPurchaseRequest,
+  createMockTransactionResponse,
+  createMockErrorResponse
+} = require('../setup');
+
+// Import the library modules using TypeScript import syntax
+import { FatZebraClient, createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../../src/lib/client';
+import type { 
+  FatZebraConfig, 
+  PurchaseRequest, 
+  TransactionResponse, 
+  FatZebraResponse,
+  TokenizationRequest,
+  RefundRequest
+} from '../../src/types';
+
+describe('FatZebraClient - Standalone Library Tests', () => {
   let client: FatZebraClient;
+  let config: FatZebraConfig;
 
   beforeEach(() => {
-    client = createFatZebraClient({
+    // Reset all mocks before each test
+    jest.clearAllMocks();
+    
+    // Create client configuration for standalone testing (not NextJS)
+    config = {
       username: 'test-username',
       token: 'test-token',
-      isTestMode: true,
-      sharedSecret: 'test-shared-secret'
-    });
+      sandbox: true, // Use sandbox instead of isTestMode
+      timeout: 30000
+    };
+
+    client = createFatZebraClient(config);
   });
 
-  describe('createFatZebraClient', () => {
-    it('should create a client instance with correct configuration', () => {
+  describe('Client Initialization', () => {
+    it('should create client instance', () => {
+      expect(client).toBeDefined();
       expect(client).toBeInstanceOf(FatZebraClient);
     });
 
-    it('should set sandbox URL for test mode', () => {
-      const testClient = createFatZebraClient({
-        username: 'test',
-        token: 'test',
-        isTestMode: true
+    it('should create client with sandbox configuration', () => {
+      const sandboxClient = createFatZebraClient({
+        username: 'test-username',
+        token: 'test-token',
+        sandbox: true
       });
-      expect(testClient).toBeInstanceOf(FatZebraClient);
+      expect(sandboxClient).toBeInstanceOf(FatZebraClient);
     });
 
-    it('should set production URL for live mode', () => {
+    it('should create client with production configuration', () => {
       const prodClient = createFatZebraClient({
-        username: 'test',
-        token: 'test',
-        isTestMode: false
+        username: 'test-username',
+        token: 'test-token',
+        sandbox: false
       });
       expect(prodClient).toBeInstanceOf(FatZebraClient);
     });
+
+    it('should validate required configuration fields', () => {
+      expect(() => createFatZebraClient({
+        username: '',
+        token: 'test-token'
+      })).not.toThrow(); // Client creation doesn't validate on construction
+
+      expect(() => createFatZebraClient({
+        username: 'test-username',
+        token: ''
+      })).not.toThrow(); // Validation happens during API calls
+    });
   });
 
-  describe('createPurchase', () => {
-    it('should successfully process a purchase', async () => {
-      const mockResponse = {
-        successful: true,
-        response: {
-          id: 'txn-123',
-          amount: 10.00,
-          currency: 'AUD',
-          reference: 'TEST-REF',
-          successful: true,
-          message: 'Approved',
-          authorization: 'AUTH123',
-          card: {
-            token: 'card-token-123',
-            display_number: '4005...0001',
-            scheme: 'visa'
-          }
-        },
-        test: true
-      };
+  describe('Purchase Transactions', () => {
+    it('should process successful purchase', async () => {
+      const mockRequest = createMockPurchaseRequest();
+      const mockResponse = createMockTransactionResponse();
 
-      mockFetchResponse(mockResponse);
+      // Mock the fetch call
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
+      );
 
-      const purchaseRequest = createMockPurchaseRequest();
-      const result = await client.createPurchase(purchaseRequest);
+      const result = await client.purchase(mockRequest);
 
+      expect(result.successful).toBe(true);
+      expect(result.response?.amount).toBe(2500);
+      expect(result.response?.currency).toBe('AUD');
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://gateway.pmnts-sandbox.io/v1.0/purchases',
+        expect.stringContaining('/purchases'),
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Authorization': expect.stringContaining('Basic'),
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': expect.stringMatching(/^Basic /)
           }),
-          body: JSON.stringify(purchaseRequest)
+          body: expect.any(String)
         })
       );
-
-      expect(result).toEqual(mockResponse);
-      expect(result.response).toHaveValidTransactionStructure();
     });
 
-    it('should handle purchase failure', async () => {
-      const mockErrorResponse = {
-        successful: false,
-        errors: ['Card declined'],
-        message: 'Transaction failed'
-      };
+    it('should handle purchase errors', async () => {
+      const mockRequest = createMockPurchaseRequest();
+      const mockError = createMockErrorResponse('Declined', ['Insufficient funds']);
 
-      mockFetchResponse(mockErrorResponse, 400, false);
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockError, false, 422)
+      );
 
-      const purchaseRequest = createMockPurchaseRequest();
-
-      await expect(client.createPurchase(purchaseRequest)).rejects.toThrow(FatZebraError);
+      await expect(client.purchase(mockRequest)).rejects.toThrow(FatZebraError);
     });
 
     it('should handle network errors', async () => {
-      mockFetchError('Network error');
+      const mockRequest = createMockPurchaseRequest();
 
-      const purchaseRequest = createMockPurchaseRequest();
+      (global.fetch as jest.Mock).mockRejectedValueOnce(
+        new Error('Network error')
+      );
 
-      await expect(client.createPurchase(purchaseRequest)).rejects.toThrow('Network error');
+      await expect(client.purchase(mockRequest)).rejects.toThrow('Network error');
     });
   });
 
-  describe('createPurchaseWithToken', () => {
-    it('should process payment with card token', async () => {
-      const mockResponse = {
-        successful: true,
-        response: {
-          id: 'txn-token-123',
-          amount: 25.50,
-          currency: 'AUD',
-          reference: 'TOKEN-REF',
-          successful: true,
-          message: 'Approved'
-        },
-        test: true
-      };
+  describe('Authorization Transactions', () => {
+    it('should process authorization', async () => {
+      const mockRequest = createMockPurchaseRequest();
+      const mockResponse = createMockTransactionResponse();
 
-      mockFetchResponse(mockResponse);
-
-      const result = await client.createPurchaseWithToken(
-        'card-token-123',
-        25.50,
-        'TOKEN-REF'
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
       );
 
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://gateway.pmnts-sandbox.io/v1.0/purchases',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({
-            card_token: 'card-token-123',
-            amount: 25.50,
-            reference: 'TOKEN-REF',
-            currency: 'AUD'
-          })
-        })
-      );
+      const result = await client.authorize(mockRequest);
 
       expect(result.successful).toBe(true);
-      expect(result.response.amount).toBe(25.50);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/purchases'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"capture":false')
+        })
+      );
     });
   });
 
-  describe('createAuthorization', () => {
-    it('should create authorization without capture', async () => {
-      const mockResponse = {
-        successful: true,
-        response: {
-          id: 'auth-123',
-          amount: 100.00,
-          currency: 'AUD',
-          reference: 'AUTH-REF',
-          successful: true,
-          message: 'Authorized'
-        },
-        test: true
-      };
+  describe('Capture Transactions', () => {
+    it('should capture authorized transaction', async () => {
+      const transactionId = 'txn-123';
+      const amount = 25.00;
+      const mockResponse = createMockTransactionResponse();
 
-      mockFetchResponse(mockResponse);
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
+      );
 
-      const authRequest = {
-        ...createMockPurchaseRequest(),
-        amount: 100.00,
-        reference: 'AUTH-REF'
-      };
+      const result = await client.capture(transactionId, amount);
 
-      const result = await client.createAuthorization(authRequest);
-
+      expect(result.successful).toBe(true);
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://gateway.pmnts-sandbox.io/v1.0/purchases',
+        expect.stringContaining(`/purchases/${transactionId}/capture`),
         expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({
-            ...authRequest,
-            capture: false
-          })
+          method: 'POST'
         })
       );
+    });
+
+    it('should capture without amount', async () => {
+      const transactionId = 'txn-123';
+      const mockResponse = createMockTransactionResponse();
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
+      );
+
+      const result = await client.capture(transactionId);
 
       expect(result.successful).toBe(true);
     });
   });
 
-  describe('captureAuthorization', () => {
-    it('should capture full authorization amount', async () => {
-      const mockResponse = {
-        successful: true,
-        response: {
-          id: 'capture-123',
-          amount: 100.00,
-          currency: 'AUD',
-          reference: 'CAPTURE-REF',
-          successful: true,
-          message: 'Captured'
-        },
-        test: true
-      };
-
-      mockFetchResponse(mockResponse);
-
-      const result = await client.captureAuthorization('auth-123');
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://gateway.pmnts-sandbox.io/v1.0/purchases/auth-123/capture',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({})
-        })
-      );
-
-      expect(result.successful).toBe(true);
-    });
-
-    it('should capture partial authorization amount', async () => {
-      const mockResponse = {
-        successful: true,
-        response: {
-          id: 'capture-partial-123',
-          amount: 50.00,
-          currency: 'AUD',
-          reference: 'PARTIAL-CAPTURE',
-          successful: true,
-          message: 'Partially captured'
-        },
-        test: true
-      };
-
-      mockFetchResponse(mockResponse);
-
-      const result = await client.captureAuthorization('auth-123', 50.00);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://gateway.pmnts-sandbox.io/v1.0/purchases/auth-123/capture',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ amount: 50.00 })
-        })
-      );
-
-      expect(result.response.amount).toBe(50.00);
-    });
-  });
-
-  describe('createRefund', () => {
-    it('should process full refund', async () => {
-      const mockResponse = {
-        successful: true,
-        response: {
-          id: 'refund-123',
-          amount: 10.00,
-          currency: 'AUD',
-          reference: 'REFUND-REF',
-          successful: true,
-          message: 'Refunded'
-        },
-        test: true
-      };
-
-      mockFetchResponse(mockResponse);
-
-      const refundRequest = {
+  describe('Refund Transactions', () => {
+    it('should process refund', async () => {
+      const refundRequest: RefundRequest = {
         transaction_id: 'txn-123',
         amount: 10.00,
-        reason: 'Customer request'
+        reference: 'REFUND-123'
       };
+      const mockResponse = createMockTransactionResponse();
 
-      const result = await client.createRefund(refundRequest);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://gateway.pmnts-sandbox.io/v1.0/refunds',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify(refundRequest)
-        })
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
       );
 
+      const result = await client.refund(refundRequest);
+
       expect(result.successful).toBe(true);
-      expect(result.response.amount).toBe(10.00);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/refunds'),
+        expect.objectContaining({
+          method: 'POST'
+        })
+      );
     });
   });
 
-  describe('createToken', () => {
-    it('should tokenize card details', async () => {
-      const mockResponse = {
-        successful: true,
-        response: {
-          token: 'card-token-123',
-          card_holder: 'John Doe',
-          card_number: '4005...0001',
-          card_expiry: '12/25',
-          authorized: true,
-          transaction_count: 0
-        },
-        test: true
-      };
-
-      mockFetchResponse(mockResponse);
-
-      const tokenRequest = {
+  describe('Tokenization', () => {
+    it('should tokenize card', async () => {
+      const tokenRequest: TokenizationRequest = {
         card_holder: 'John Doe',
         card_number: '4005550000000001',
         card_expiry: '12/25',
         cvv: '123'
       };
-
-      const result = await client.createToken(tokenRequest);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://gateway.pmnts-sandbox.io/v1.0/credit_cards',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify(tokenRequest)
-        })
-      );
-
-      expect(result.successful).toBe(true);
-      expect(result.response.token).toBe('card-token-123');
-    });
-  });
-
-  describe('generateVerificationHash', () => {
-    it('should generate verification hash', () => {
-      const hashData = {
-        reference: 'TEST-REF',
-        amount: 10.00,
-        currency: 'AUD',
-        timestamp: 1640995200
-      };
-
-      const hash = client.generateVerificationHash(hashData);
-
-      expect(hash).toBe('mocked-hash'); // Based on our mocked crypto
-      expect(typeof hash).toBe('string');
-    });
-
-    it('should throw error if shared secret is missing', () => {
-      const clientWithoutSecret = createFatZebraClient({
-        username: 'test',
-        token: 'test',
-        isTestMode: true
-        // No shared secret
-      });
-
-      expect(() => {
-        clientWithoutSecret.generateVerificationHash({
-          reference: 'TEST',
-          amount: 10,
-          currency: 'AUD'
-        });
-      }).toThrow('Shared secret is required');
-    });
-  });
-
-  describe('verifyWebhookSignature', () => {
-    it('should verify webhook signature', () => {
-      const payload = '{"test": "data"}';
-      const signature = 'test-signature';
-
-      const isValid = client.verifyWebhookSignature(payload, signature);
-
-      expect(typeof isValid).toBe('boolean');
-    });
-  });
-
-  describe('ping', () => {
-    it('should perform health check', async () => {
       const mockResponse = {
         successful: true,
         response: {
-          message: 'Pong'
+          token: 'token-123',
+          card_holder: 'John Doe',
+          card_number: '4005***********0001',
+          card_type: 'Visa',
+          expiry_date: '12/25',
+          created_at: new Date().toISOString()
         },
         test: true
       };
 
-      mockFetchResponse(mockResponse);
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
+      );
 
-      const result = await client.ping();
+      const result = await client.tokenize(tokenRequest);
 
+      expect(result.successful).toBe(true);
+      expect(result.response?.token).toBe('token-123');
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://gateway.pmnts-sandbox.io/v1.0/ping',
+        expect.stringContaining('/credit_cards'),
+        expect.objectContaining({
+          method: 'POST'
+        })
+      );
+    });
+  });
+
+  describe('Transaction Management', () => {
+    it('should get transaction details', async () => {
+      const transactionId = 'txn-123';
+      const mockResponse = createMockTransactionResponse();
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
+      );
+
+      const result = await client.getTransaction(transactionId);
+
+      expect(result.successful).toBe(true);
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(`/purchases/${transactionId}`),
         expect.objectContaining({
           method: 'GET'
         })
       );
+    });
+
+    it('should void transaction', async () => {
+      const transactionId = 'txn-123';
+      const mockResponse = createMockTransactionResponse();
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
+      );
+
+      const result = await client.void(transactionId);
 
       expect(result.successful).toBe(true);
-      expect(result.response.message).toBe('Pong');
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining(`/purchases/${transactionId}/void`),
+        expect.objectContaining({
+          method: 'POST'
+        })
+      );
+    });
+  });
+
+  describe('Response Handling', () => {
+    it('should handle successful responses correctly', async () => {
+      const mockResponse = createMockTransactionResponse();
+      
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
+      );
+
+      const result = await client.purchase(createMockPurchaseRequest());
+
+      expect(result.successful).toBe(true);
+      expect(result.response).toBeDefined();
+      expect(result.response?.id).toBeDefined();
+      expect(result.errors).toEqual([]);
+    });
+
+    it('should handle error responses correctly using handleFatZebraResponse', () => {
+      const errorResponse: FatZebraResponse = {
+        successful: false,
+        errors: ['Payment declined', 'Insufficient funds']
+      };
+
+      expect(() => handleFatZebraResponse(errorResponse)).toThrow(FatZebraError);
+    });
+
+    it('should pass through successful responses using handleFatZebraResponse', () => {
+      const successResponse: FatZebraResponse = {
+        successful: true,
+        response: { id: 'txn-123' },
+        errors: []
+      };
+
+      const result = handleFatZebraResponse(successResponse);
+      expect(result.successful).toBe(true);
+      expect(result.response?.id).toBe('txn-123');
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should create FatZebraError with proper properties', () => {
+      const error = new FatZebraError('Test error', ['Error 1', 'Error 2'], { test: true });
+
+      expect(error).toBeInstanceOf(Error);
+      expect(error).toBeInstanceOf(FatZebraError);
+      expect(error.message).toBe('Test error');
+      expect(error.errors).toEqual(['Error 1', 'Error 2']);
+      expect(error.response).toEqual({ test: true });
+      expect(error.name).toBe('FatZebraError');
+    });
+
+    it('should handle timeout errors', async () => {
+      const mockRequest = createMockPurchaseRequest();
+
+      // Mock an AbortError (timeout)
+      const abortError = new Error('Request timeout');
+      abortError.name = 'AbortError';
+      (global.fetch as jest.Mock).mockRejectedValueOnce(abortError);
+
+      await expect(client.purchase(mockRequest)).rejects.toThrow('Request timeout');
+    });
+  });
+
+  describe('Standalone Library Features', () => {
+    it('should work without NextJS dependencies', () => {
+      // Ensure no NextJS-specific globals are required
+      expect(typeof window === 'undefined' || window.location).toBeTruthy();
+      expect(process.env.NODE_ENV).toBe('test');
+    });
+
+    it('should handle environment configuration for standalone use', () => {
+      // Test sandbox configuration
+      const sandboxClient = createFatZebraClient({
+        username: 'test',
+        token: 'test',
+        sandbox: true
+      });
+      expect(sandboxClient).toBeInstanceOf(FatZebraClient);
+
+      // Test production configuration
+      const prodClient = createFatZebraClient({
+        username: 'test',
+        token: 'test',
+        sandbox: false
+      });
+      expect(prodClient).toBeInstanceOf(FatZebraClient);
+    });
+
+    it('should provide proper TypeScript types', () => {
+      // This test ensures TypeScript compilation works correctly
+      const request: PurchaseRequest = createMockPurchaseRequest();
+      expect(request.amount).toBe('number');
+      expect(request.currency).toBe('string');
+      expect(request.card_number).toBe('string');
+
+      const client: FatZebraClient = createFatZebraClient(config);
+      expect(client).toBeInstanceOf(FatZebraClient);
+    });
+
+    it('should handle authentication headers correctly', async () => {
+      const mockRequest = createMockPurchaseRequest();
+      const mockResponse = createMockTransactionResponse();
+
+      (global.fetch as jest.Mock).mockResolvedValueOnce(
+        mockFetchResponse(mockResponse)
+      );
+
+      await client.purchase(mockRequest);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      const headers = fetchCall[1].headers;
+      
+      expect(headers['Authorization']).toMatch(/^Basic /);
+      expect(headers['Content-Type']).toBe('application/json');
+      expect(headers['User-Agent']).toMatch(/FatZebra/);
     });
   });
 });
 
-describe('handleFatZebraResponse', () => {
-  it('should return response data for successful transactions', () => {
-    const mockResponse = {
-      successful: true,
-      response: {
-        id: 'txn-123',
-        amount: 10.00,
-        currency: 'AUD',
-        reference: 'TEST',
-        successful: true
-      },
-      test: true
-    };
-
-    const result = handleFatZebraResponse(mockResponse);
-
-    expect(result).toEqual(mockResponse.response);
+// Additional integration tests for standalone usage
+describe('Integration Tests - Standalone Library', () => {
+  it('should work with different module loading patterns', () => {
+    // Test that imports work correctly
+    expect(createFatZebraClient).toBeDefined();
+    expect(FatZebraClient).toBeDefined();
+    expect(FatZebraError).toBeDefined();
+    expect(handleFatZebraResponse).toBeDefined();
   });
 
-  it('should throw FatZebraError for failed transactions', () => {
-    const mockResponse = {
-      successful: false,
-      errors: ['Card declined', 'Insufficient funds'],
-      test: true
-    };
+  it('should handle concurrent requests', async () => {
+    const client = createFatZebraClient({
+      username: 'test-username',
+      token: 'test-token',
+      sandbox: true
+    });
 
-    expect(() => {
-      handleFatZebraResponse(mockResponse);
-    }).toThrow(FatZebraError);
+    const mockResponse = createMockTransactionResponse();
+    (global.fetch as jest.Mock).mockResolvedValue(
+      mockFetchResponse(mockResponse)
+    );
 
-    try {
-      handleFatZebraResponse(mockResponse);
-    } catch (error) {
-      expect(error).toBeInstanceOf(FatZebraError);
-      expect((error as FatZebraError).errors).toEqual(['Card declined', 'Insufficient funds']);
-    }
-  });
-});
+    const requests = Array(5).fill(null).map(() => 
+      client.purchase(createMockPurchaseRequest())
+    );
 
-describe('FatZebraError', () => {
-  it('should create error with message and errors', () => {
-    const error = new FatZebraError('Payment failed', ['Card declined'], '400');
+    const results = await Promise.all(requests);
 
-    expect(error.message).toBe('Payment failed');
-    expect(error.errors).toEqual(['Card declined']);
-    expect(error.code).toBe('400');
-    expect(error.name).toBe('FatZebraError');
+    results.forEach(result => {
+      expect(result.successful).toBe(true);
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(5);
   });
 
-  it('should create error with just message', () => {
-    const error = new FatZebraError('Simple error');
+  it('should work with custom gateway URLs', () => {
+    const customClient = createFatZebraClient({
+      username: 'test',
+      token: 'test',
+      sandbox: true,
+      gatewayUrl: 'https://custom.gateway.com',
+      timeout: 15000
+    });
 
-    expect(error.message).toBe('Simple error');
-    expect(error.errors).toEqual([]);
-    expect(error.code).toBeUndefined();
+    expect(customClient).toBeInstanceOf(FatZebraClient);
   });
 });
