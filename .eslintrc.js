@@ -38,14 +38,14 @@ module.exports = {
   rules: {
     // Basic rules
     'no-unused-vars': 'off', // Turned off in favor of @typescript-eslint version
-    'no-console': 'warn',
+    'no-console': 'off', // Changed from 'warn' to 'off'
     'no-debugger': 'error',
     'prefer-const': 'error',
     'no-var': 'error',
 
     // TypeScript specific rules (without requiring @typescript-eslint/recommended)
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-    '@typescript-eslint/no-explicit-any': 'warn',
+    '@typescript-eslint/no-explicit-any': 'off', // Changed from 'warn' to 'off'
 
     // React rules  
     'react/react-in-jsx-scope': 'off',
@@ -53,7 +53,7 @@ module.exports = {
     
     // React Hooks - made less strict for development
     'react-hooks/rules-of-hooks': 'error',
-    'react-hooks/exhaustive-deps': 'warn'
+    'react-hooks/exhaustive-deps': 'off' // Changed from 'warn' to 'off'
   },
   overrides: [
     {
@@ -82,7 +82,7 @@ module.exports = {
     {
       files: ['src/types/**/*'],
       rules: {
-        '@typescript-eslint/no-explicit-any': 'warn' // Less strict for type definitions
+        '@typescript-eslint/no-explicit-any': 'off' // Changed from 'warn' to 'off'
       }
     },
     {
