@@ -11,6 +11,7 @@ out/
 # Production builds
 dist/
 build/
+build.log
 
 # Environment variables
 .env
