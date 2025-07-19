@@ -14,11 +14,19 @@ const external = [
 
 // Common plugins configuration
 const getPlugins = (tsConfigPath = './tsconfig.build.json') => [
-  resolve(),
-  commonjs(),
+  resolve({
+    preferBuiltins: true,
+    browser: false
+  }),
+  commonjs({
+    include: ['node_modules/**']
+  }),
   typescript({
     tsconfig: tsConfigPath,
-    declaration: false
+    declaration: false,
+    declarationMap: false,
+    sourceMap: true,
+    exclude: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx']
   })
 ];
 
@@ -29,7 +37,8 @@ module.exports = [
     output: {
       file: pkg.module,
       format: 'esm',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -41,7 +50,8 @@ module.exports = [
     output: {
       file: pkg.main,
       format: 'cjs',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -53,7 +63,8 @@ module.exports = [
     output: {
       file: 'dist/components/index.esm.js',
       format: 'esm',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -65,7 +76,8 @@ module.exports = [
     output: {
       file: 'dist/components/index.js',
       format: 'cjs',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -77,7 +89,8 @@ module.exports = [
     output: {
       file: 'dist/hooks/index.esm.js',
       format: 'esm',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -89,7 +102,8 @@ module.exports = [
     output: {
       file: 'dist/hooks/index.js',
       format: 'cjs',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -101,7 +115,8 @@ module.exports = [
     output: {
       file: 'dist/server/index.esm.js',
       format: 'esm',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -113,7 +128,8 @@ module.exports = [
     output: {
       file: 'dist/server/index.js',
       format: 'cjs',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -125,7 +141,8 @@ module.exports = [
     output: {
       file: 'dist/utils/index.esm.js',
       format: 'esm',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -137,7 +154,8 @@ module.exports = [
     output: {
       file: 'dist/utils/index.js',
       format: 'cjs',
-      sourcemap: true
+      sourcemap: true,
+      exports: 'named'
     },
     external,
     plugins: getPlugins()
@@ -150,7 +168,8 @@ module.exports = [
       file: pkg.types,
       format: 'esm'
     },
-    plugins: [dts.default()]
+    plugins: [dts.default()],
+    external: [...external, /\.css$/]
   },
 
   // Type definitions for components
@@ -160,7 +179,8 @@ module.exports = [
       file: 'dist/components/index.d.ts',
       format: 'esm'
     },
-    plugins: [dts.default()]
+    plugins: [dts.default()],
+    external: [...external, /\.css$/]
   },
 
   // Type definitions for hooks
@@ -170,7 +190,8 @@ module.exports = [
       file: 'dist/hooks/index.d.ts',
       format: 'esm'
     },
-    plugins: [dts.default()]
+    plugins: [dts.default()],
+    external: [...external, /\.css$/]
   },
 
   // Type definitions for server
@@ -180,7 +201,8 @@ module.exports = [
       file: 'dist/server/index.d.ts',
       format: 'esm'
     },
-    plugins: [dts.default()]
+    plugins: [dts.default()],
+    external: [...external, /\.css$/]
   },
 
   // Type definitions for utils
@@ -190,6 +212,7 @@ module.exports = [
       file: 'dist/utils/index.d.ts',
       format: 'esm'
     },
-    plugins: [dts.default()]
+    plugins: [dts.default()],
+    external: [...external, /\.css$/]
   }
 ];

@@ -1,3 +1,7 @@
+/**
+ * Fat Zebra Next.js Package - Server Module Exports
+ */
+
 // Export all server-side route handlers
 export * from './routes';
 

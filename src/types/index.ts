@@ -1,47 +1,49 @@
+/**
+ * Fat Zebra Next.js Package - Type Definitions
+ * Complete type definitions for the Fat Zebra payment gateway
+ */
+
+// Core Configuration Types
 export interface FatZebraConfig {
   username: string;
   token: string;
   isTestMode?: boolean;
-  baseUrl?: string;
-  sharedSecret?: string;
+  gatewayUrl?: string;
+  apiVersion?: string;
+  timeout?: number;
 }
 
-export interface OAuthConfig {
-  clientId: string;
-  clientSecret: string;
-  scope?: string;
-}
-
+// Card and Payment Types
 export interface CardDetails {
   card_holder: string;
   card_number: string;
-  card_expiry: string; // MM/YY format
+  card_expiry: string;
   cvv: string;
 }
 
 export interface Customer {
+  id?: string;
+  email?: string;
   first_name?: string;
   last_name?: string;
-  email?: string;
   phone?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  postcode?: string;
-  country?: string;
-  ip_address?: string;
+  address?: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    postal_code?: string;
+    country?: string;
+  };
 }
 
+// Request Types
 export interface PurchaseRequest {
   amount: number;
   currency: string;
   reference: string;
-  customer_ip?: string;
-  customer?: Customer;
   card_details?: CardDetails;
-  card_token?: string;
-  capture?: boolean;
-  extra?: Record<string, any>;
+  customer?: Customer;
   metadata?: Record<string, any>;
 }
 
@@ -49,189 +51,101 @@ export interface AuthorizationRequest {
   amount: number;
   currency: string;
   reference: string;
-  customer_ip?: string;
-  customer?: Customer;
   card_details?: CardDetails;
-  card_token?: string;
-  extra?: Record<string, any>;
+  customer?: Customer;
   metadata?: Record<string, any>;
 }
 
 export interface RefundRequest {
-  transaction_id?: string;
-  reference?: string;
+  transaction_id: string;
   amount?: number;
+  reference?: string;
   reason?: string;
 }
 
 export interface TokenizationRequest {
-  card_holder: string;
-  card_number: string;
-  card_expiry: string;
-  cvv: string;
-  verification?: string;
+  card_details: CardDetails;
+  customer?: Customer;
+}
+
+// Response Types
+export interface FatZebraResponse<T = any> {
+  successful: boolean;
+  response: T;
+  errors: string[];
+  test: boolean;
 }
 
 export interface TransactionResponse {
   id: string;
-  successful: boolean;
-  response: {
-    id: string;
-    amount: number;
-    currency: string;
-    reference: string;
-    message: string;
-    authorization: string;
-    card: {
-      token: string;
-      display_number: string;
-      scheme: string;
-      expiry_month: number;
-      expiry_year: number;
-    };
-    settlement: {
-      date: string;
-    };
-    transaction_fee: number;
-    acquirer_response: {
-      code: string;
-      message: string;
-    };
-  };
-  errors?: string[];
-  test: boolean;
-}
-
-export interface TokenizationResponse {
-  successful: boolean;
-  response: {
-    token: string;
-    card_holder: string;
-    card_number: string;
-    card_expiry: string;
-    authorized: boolean;
-    transaction_count: number;
-  };
-  errors?: string[];
-  test: boolean;
-}
-
-export interface FatZebraResponse<T> {
-  successful: boolean;
-  response: T;
-  errors?: string[];
-  test: boolean;
-}
-
-export interface PaymentFormData {
   amount: number;
   currency: string;
   reference: string;
-  cardDetails: CardDetails;
-  customer?: Customer;
+  authorization: string;
+  successful: boolean;
+  message: string;
+  card_holder: string;
+  card_number: string;
+  card_type: string;
+  settlement_date?: string;
+  metadata?: Record<string, any>;
 }
 
+export interface TokenizationResponse {
+  token: string;
+  card_holder: string;
+  card_number: string;
+  card_type: string;
+  expiry_date: string;
+}
+
+export interface SettlementResponse {
+  id: string;
+  batch_id: string;
+  amount: number;
+  currency: string;
+  settled_at: string;
+  transactions: TransactionResponse[];
+}
+
+// Validation Types
+export interface CardValidationResult {
+  valid: boolean;
+  errors: string[];
+  type?: string;
+}
+
+// Hook Types
+export interface UsePaymentOptions {
+  username?: string;
+  token?: string;
+  isTestMode?: boolean;
+  enableTokenization?: boolean;
+}
+
+export interface UsePaymentResult {
+  isLoading: boolean;
+  error: string | null;
+  processPayment: (data: PaymentFormData) => Promise<TransactionResponse>;
+  tokenizeCard: (cardDetails: CardDetails) => Promise<string>;
+  clearError: () => void;
+}
+
+// Component Types
 export interface PaymentFormProps {
   onSubmit: (data: PaymentFormData) => Promise<void>;
   amount?: number;
   currency?: string;
   loading?: boolean;
   enableTokenization?: boolean;
-  enable3DS?: boolean;
-  accessToken?: string;
-  username?: string;
   onTokenizationSuccess?: (token: string) => void;
-  onScaSuccess?: (event: any) => void;
-  onScaError?: (error: any) => void;
   className?: string;
-  showAmountField?: boolean;
-  requireCustomer?: boolean;
 }
 
-export interface UsePaymentOptions {
-  enableTokenization?: boolean;
-  enable3DS?: boolean;
-  accessToken?: string;
-  username?: string;
-  autoReset?: boolean;
-}
-
-export interface UsePaymentResult {
-  loading: boolean;
-  error: string | null;
-  success: boolean;
-  processPayment: (data: PaymentFormData) => Promise<any>;
-  tokenizeCard: (cardDetails: CardDetails) => Promise<string>;
-  verifyCard: (cardDetails: CardDetails) => Promise<boolean>;
-  reset: () => void;
-}
-
-export interface DirectDebitRequest {
-  account_name: string;
-  account_number: string;
-  bsb: string;
+export interface PaymentFormData {
   amount: number;
-  currency: string;
-  reference: string;
-  customer_ip?: string;
+  cardDetails: CardDetails;
   customer?: Customer;
-}
-
-export interface WebhookEvent {
-  id: string;
-  type: string;
-  object: string;
-  data: {
-    id: string;
-    amount: number;
-    reference: string;
-    successful: boolean;
-    message: string;
-    settlement_date: string;
-  };
-  created_at: string;
-}
-
-export interface VerificationHashData {
-  reference: string;
-  amount: number;
-  currency: string;
-  timestamp?: number;
-}
-
-export interface Environment {
-  sandbox: 'sandbox';
-  production: 'production';
-}
-
-export interface PaymentEvent {
-  type: string;
-  data: any;
-  timestamp: number;
-}
-
-export interface SettlementResponse {
-  id: string;
-  date: string;
-  total_amount: number;
-  currency: string;
-  transactions: Array<{
-    id: string;
-    amount: number;
-    reference: string;
-    type: string;
-  }>;
-}
-
-export interface BatchRequest {
-  requests: Array<PurchaseRequest | AuthorizationRequest | RefundRequest>;
-  batch_reference: string;
-}
-
-export interface CardValidationResult {
-  isValid: boolean;
-  cardType: string;
-  errors: string[];
 }
 
 export interface PaymentFormErrors {
@@ -240,83 +154,86 @@ export interface PaymentFormErrors {
   card_expiry?: string;
   cvv?: string;
   amount?: string;
-  email?: string;
   general?: string;
 }
 
-// Constants
-export const CARD_TYPES = {
-  VISA: 'visa',
-  MASTERCARD: 'mastercard',
-  AMEX: 'amex',
-  DINERS: 'diners',
-  DISCOVER: 'discover',
-  JCB: 'jcb',
-  UNKNOWN: 'unknown'
-} as const;
+// OAuth and Verification Types
+export interface OAuthConfig {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  scope?: string[];
+}
 
+export interface VerificationHashData {
+  amount: number;
+  currency: string;
+  reference: string;
+  card_token?: string;
+  timestamp: number;
+}
+
+export interface WebhookEvent {
+  id: string;
+  type: string;
+  created_at: string;
+  data: {
+    object: TransactionResponse | TokenizationResponse | SettlementResponse;
+  };
+  api_version: string;
+}
+
+// Constants
 export const CURRENCIES = {
   AUD: 'AUD',
   USD: 'USD',
   NZD: 'NZD',
   GBP: 'GBP',
   EUR: 'EUR',
-  CAD: 'CAD',
-  SGD: 'SGD',
-  HKD: 'HKD',
-  JPY: 'JPY'
 } as const;
 
 export const TEST_CARDS = {
   VISA_SUCCESS: '4005550000000001',
-  VISA_DECLINE: '4005550000000019',
-  VISA_3DS_SUCCESS: '4005554444444460',
   MASTERCARD_SUCCESS: '5123456789012346',
-  MASTERCARD_DECLINE: '5123456789012353',
   AMEX_SUCCESS: '345678901234564',
+  VISA_DECLINE: '4005550000000019',
+  MASTERCARD_DECLINE: '5123456789012353',
   AMEX_DECLINE: '345678901234572',
-  DINERS_SUCCESS: '30000000000004',
-  DISCOVER_SUCCESS: '6011000000000004'
 } as const;
 
-export const TRANSACTION_TYPES = {
-  PURCHASE: 'Purchase',
-  AUTHORIZATION: 'Authorization',
-  CAPTURE: 'Capture',
-  REFUND: 'Refund',
-  VOID: 'Void'
-} as const;
+// Error Types
+export class FatZebraError extends Error {
+  errors: string[];
+  response?: any;
+  
+  constructor(message: string, errors: string[] = [], response?: any) {
+    super(message);
+    this.name = 'FatZebraError';
+    this.errors = errors;
+    this.response = response;
+    
+    // Maintains proper stack trace for where our error was thrown (only available on V8)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, FatZebraError);
+    }
+  }
+}
 
-export const TRANSACTION_STATUSES = {
-  SUCCESSFUL: 'successful',
-  DECLINED: 'declined',
-  PENDING: 'pending',
-  FAILED: 'failed'
-} as const;
+// Type Guards
+export function isFatZebraError(error: unknown): error is FatZebraError {
+  return error instanceof FatZebraError;
+}
 
-export const ERROR_CODES = {
-  INVALID_CARD: 'invalid_card',
-  EXPIRED_CARD: 'expired_card',
-  INSUFFICIENT_FUNDS: 'insufficient_funds',
-  INVALID_CVV: 'invalid_cvv',
-  FRAUD_DETECTED: 'fraud_detected',
-  PROCESSING_ERROR: 'processing_error',
-  NETWORK_ERROR: 'network_error',
-  CONFIGURATION_ERROR: 'configuration_error'
-} as const;
+export function isErrorWithMessage(error: unknown): error is { message: string } {
+  return typeof error === 'object' && error !== null && 'message' in error;
+}
 
-export type CardType = typeof CARD_TYPES[keyof typeof CARD_TYPES];
-export type Currency = typeof CURRENCIES[keyof typeof CURRENCIES];
-export type TransactionType = typeof TRANSACTION_TYPES[keyof typeof TRANSACTION_TYPES];
-export type TransactionStatus = typeof TRANSACTION_STATUSES[keyof typeof TRANSACTION_STATUSES];
-export type ErrorCode = typeof ERROR_CODES[keyof typeof ERROR_CODES];
+export function isErrorWithErrors(error: unknown): error is { errors: string[] } {
+  return typeof error === 'object' && error !== null && 'errors' in error && Array.isArray((error as any).errors);
+}
 
-// Export all types
-export default {
-  CARD_TYPES,
-  CURRENCIES,
-  TEST_CARDS,
-  TRANSACTION_TYPES,
-  TRANSACTION_STATUSES,
-  ERROR_CODES
-};
+// Utility Types
+export type Currency = keyof typeof CURRENCIES;
+export type TestCard = keyof typeof TEST_CARDS;
+export type PaymentMethod = 'card' | 'token';
+export type TransactionType = 'purchase' | 'authorization' | 'refund';

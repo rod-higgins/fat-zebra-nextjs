@@ -1,2 +1,5 @@
-// Only export the component, not the types (types are exported from ./types)
+/**
+ * Fat Zebra Next.js Package - Components Module Exports
+ */
+
 export { PaymentForm } from './PaymentForm';

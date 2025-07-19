@@ -1,1 +1,5 @@
-export { usePayment, useOAuthPayment, usePaymentEvents } from './usePayment';
+/**
+ * Fat Zebra Next.js Package - Hooks Module Exports
+ */
+
+export { usePayment, usePaymentWithRetry } from './usePayment';

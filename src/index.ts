@@ -1,21 +1,21 @@
-// Core client functionality
+/**
+ * Fat Zebra Next.js Package - Main Module Exports
+ * Entry point for the Fat Zebra Next.js payment library
+ */
+
+// Core client exports
 export { 
-  FatZebraClient,
-  createFatZebraClient,
-  FatZebraError,
-  handleFatZebraResponse,
-  TEST_CARDS
-} from './lib';
+  FatZebraClient, 
+  createFatZebraClient, 
+  FatZebraError, 
+  handleFatZebraResponse 
+} from './lib/client';
 
 // React components
 export { PaymentForm } from './components';
 
 // React hooks
-export { 
-  usePayment,
-  useOAuthPayment,
-  usePaymentEvents
-} from './hooks';
+export { usePayment, usePaymentWithRetry } from './hooks';
 
 // Utility functions
 export {
@@ -23,67 +23,56 @@ export {
   formatCardNumber,
   formatExpiryDate,
   formatCvv,
-  detectCardType,
-  luhnCheck,
-  validateEmail,
-  validatePhone,
-  maskCardNumber,
-  generateReference,
-  formatCurrency,
-  parseCurrencyAmount,
   validateAmount,
-  isTestCardNumber,
-  generateTestCustomer,
-  // Utility aliases
-  isValidCard,
-  formatCard,
-  maskCard,
-  createReference,
-  toCurrency,
-  parseAmount,
-  isTestCard
+  generateVerificationHash,
+  extractErrorMessage,
+  extractErrorDetails,
+  formatCurrency,
+  sanitizeCardNumber,
+  generateReference,
+  isTestCard,
+  luhnCheck,
+  getCardType,
 } from './utils';
 
-// Server-side handlers
-export {
-  generateAccessToken,
-  processPayment,
-  processPaymentWithToken,
-  tokenizeCard,
-  generateVerificationHash,
-  handleWebhook,
-  verifyCard,
-  getTransaction,
-  healthCheck
-} from './server';
-
-// Type definitions - all from types module
+// Type definitions
 export type {
   FatZebraConfig,
-  OAuthConfig,
   CardDetails,
   Customer,
   PurchaseRequest,
   AuthorizationRequest,
   RefundRequest,
   TokenizationRequest,
+  FatZebraResponse,
   TransactionResponse,
   TokenizationResponse,
-  FatZebraResponse,
-  PaymentFormData,
-  PaymentFormProps,
+  SettlementResponse,
+  CardValidationResult,
   UsePaymentOptions,
   UsePaymentResult,
-  DirectDebitRequest,
-  WebhookEvent,
+  PaymentFormProps,
+  PaymentFormData,
+  PaymentFormErrors,
+  OAuthConfig,
   VerificationHashData,
-  Environment,
-  PaymentEvent,
-  SettlementResponse,
-  BatchRequest,
-  CardValidationResult,
-  PaymentFormErrors
+  WebhookEvent,
+  Currency,
+  TestCard,
+  PaymentMethod,
+  TransactionType,
 } from './types';
 
-// Default export
-export { createFatZebraClient as default } from './lib';
+// Constants
+export { TEST_CARDS, CURRENCIES } from './types';
+
+// Default export for convenience
+export default {
+  createFatZebraClient,
+  FatZebraError,
+  handleFatZebraResponse,
+  PaymentForm,
+  usePayment,
+  TEST_CARDS,
+  CURRENCIES,
+};
