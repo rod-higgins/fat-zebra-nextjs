@@ -1,5 +1,5 @@
 /**
- * Fat Zebra Next.js Package - Components Module Exports
+ * Components module exports
  */
 
 export { PaymentForm } from './PaymentForm';

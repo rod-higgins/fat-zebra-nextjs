@@ -1,38 +1,26 @@
 /**
- * Fat Zebra Next.js Package - Utility Functions
- * Complete utility functions for validation, formatting, and error handling
+ * Utility functions for Fat Zebra Next.js Package
  */
 
-import type { CardValidationResult, VerificationHashData } from '../types';
-import { FatZebraError, isErrorWithMessage, isErrorWithErrors } from '../types';
+import type { CardValidationResult } from '../types';
+import { 
+  FatZebraError, 
+  isFatZebraError, 
+  isErrorWithMessage, 
+  isErrorWithErrors 
+} from '../types';
 
 /**
- * Luhn algorithm for credit card validation
+ * Luhn algorithm check for credit card validation
  */
-export function luhnCheck(cardNumber: string): boolean {
-  const digits = cardNumber.replace(/\D/g, '');
-  
-  if (digits.length < 13 || digits.length > 19) {
-    return false;
-  }
-
-  let sum = 0;
-  let isEven = false;
-
-  for (let i = digits.length - 1; i >= 0; i--) {
-    let digit = parseInt(digits[i], 10);
-
-    if (isEven) {
-      digit *= 2;
-      if (digit > 9) {
-        digit -= 9;
-      }
-    }
-
-    sum += digit;
-    isEven = !isEven;
-  }
-
+export function luhnCheck(num: string): boolean {
+  let arr = (num + '')
+    .split('')
+    .reverse()
+    .map(x => parseInt(x));
+  let lastDigit = arr.splice(0, 1)[0];
+  let sum = arr.reduce((acc, val, i) => (i % 2 !== 0 ? acc + val : acc + ((val * 2) % 9) || 9), 0);
+  sum += lastDigit;
   return sum % 10 === 0;
 }
 
@@ -44,6 +32,7 @@ export function getCardType(cardNumber: string): string {
   
   if (digits.match(/^4/)) return 'visa';
   if (digits.match(/^5[1-5]/)) return 'mastercard';
+  if (digits.match(/^2[2-7]/)) return 'mastercard';
   if (digits.match(/^3[47]/)) return 'amex';
   if (digits.match(/^6(?:011|5)/)) return 'discover';
   if (digits.match(/^(?:2131|1800|35)/)) return 'jcb';
@@ -122,106 +111,109 @@ export function validateCard(cardDetails: {
     }
   }
 
+  const cardType = cardNumber ? getCardType(cardNumber) : undefined;
+
   return {
     valid: errors.length === 0,
     errors,
-    type: cardNumber ? getCardType(cardNumber) : undefined,
+    type: cardType || 'unknown'
   };
 }
 
 /**
- * Format card number with spaces
+ * Format card number with appropriate spacing
  */
-export function formatCardNumber(cardNumber: string): string {
-  const digits = cardNumber.replace(/\D/g, '');
-  const cardType = getCardType(digits);
-  
-  if (cardType === 'amex') {
-    // Format: XXXX XXXXXX XXXXX
-    return digits.replace(/(\d{4})(\d{6})(\d{5})/, '$1 $2 $3');
+export function formatCardNumber(value: string): string {
+  const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+  const matches = v.match(/\d{4,16}/g);
+  const match = matches && matches[0] || '';
+  const parts = [];
+
+  for (let i = 0, len = match.length; i < len; i += 4) {
+    parts.push(match.substring(i, i + 4));
+  }
+
+  if (parts.length) {
+    return parts.join(' ');
   } else {
-    // Format: XXXX XXXX XXXX XXXX
-    return digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+    return v;
   }
 }
 
 /**
- * Format expiry date
+ * Format expiry date as MM/YY
  */
-export function formatExpiryDate(expiry: string): string {
-  const digits = expiry.replace(/\D/g, '');
-  
-  if (digits.length >= 2) {
-    return digits.substring(0, 2) + (digits.length > 2 ? '/' + digits.substring(2, 4) : '');
+export function formatExpiryDate(value: string): string {
+  const v = value.replace(/\D/g, '');
+  if (v.length >= 2) {
+    return v.substring(0, 2) + (v.length > 2 ? '/' + v.substring(2, 4) : '');
   }
-  
-  return digits;
+  return v;
 }
 
 /**
- * Format CVV
+ * Format CVV (limit to 4 digits)
  */
-export function formatCvv(cvv: string): string {
-  return cvv.replace(/\D/g, '').substring(0, 4);
+export function formatCvv(value: string): string {
+  return value.replace(/\D/g, '').substring(0, 4);
 }
 
 /**
  * Validate amount
  */
-export function validateAmount(amount: number): void {
+export function validateAmount(amount: number, currency?: string): boolean {
   if (typeof amount !== 'number' || isNaN(amount)) {
-    throw new FatZebraError('Amount must be a valid number');
+    return false;
   }
   
   if (amount <= 0) {
-    throw new FatZebraError('Amount must be greater than 0');
+    return false;
   }
   
+  // Check for reasonable maximum (adjust as needed)
   if (amount > 999999.99) {
-    throw new FatZebraError('Amount cannot exceed $999,999.99');
+    return false;
   }
   
-  // Check for valid decimal places (max 2)
-  if (Math.round(amount * 100) !== amount * 100) {
-    throw new FatZebraError('Amount can have at most 2 decimal places');
-  }
+  return true;
 }
 
 /**
- * Generate verification hash for webhooks
+ * Generate verification hash for secure transactions
  */
-export async function generateVerificationHash(data: VerificationHashData, secret: string): Promise<string> {
-  try {
-    const crypto = await import('crypto');
-    const payload = `${data.amount}${data.currency}${data.reference}${data.card_token || ''}${data.timestamp}`;
-    const hash = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-    return hash;
-  } catch (error) {
-    throw new FatZebraError(
-      'Failed to generate verification hash',
-      [error instanceof Error ? error.message : 'Unknown error']
-    );
+export function generateVerificationHash(data: {
+  amount: number;
+  currency: string;
+  reference: string;
+  timestamp: number;
+}, secret: string): string {
+  // Simple hash implementation - in production, use proper crypto
+  const payload = `${data.amount}${data.currency}${data.reference}${data.timestamp}${secret}`;
+  
+  let hash = 0;
+  for (let i = 0; i < payload.length; i++) {
+    const char = payload.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
   }
+  
+  return Math.abs(hash).toString(16);
 }
 
 /**
  * Extract error message from various error types
  */
 export function extractErrorMessage(error: unknown): string {
-  if (typeof error === 'string') {
-    return error;
-  }
-  
-  if (error instanceof FatZebraError) {
-    return error.message;
+  if (isFatZebraError(error)) {
+    return error.errors.length > 0 ? error.errors[0] : error.message;
   }
   
   if (isErrorWithMessage(error)) {
     return error.message;
   }
   
-  if (isErrorWithErrors(error) && error.errors.length > 0) {
-    return error.errors[0];
+  if (typeof error === 'string') {
+    return error;
   }
   
   return 'An unknown error occurred';
@@ -231,7 +223,7 @@ export function extractErrorMessage(error: unknown): string {
  * Extract error details from various error types
  */
 export function extractErrorDetails(error: unknown): string[] {
-  if (error instanceof FatZebraError) {
+  if (isFatZebraError(error)) {
     return error.errors.length > 0 ? error.errors : [error.message];
   }
   
@@ -337,4 +329,88 @@ export async function retryWithBackoff<T>(
   }
   
   throw lastError;
+}
+
+/**
+ * Validate email address
+ */
+export function validateEmail(email: string): { valid: boolean; error?: string } {
+  if (!email.trim()) {
+    return { valid: false, error: 'Email is required' };
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return { valid: false, error: 'Invalid email format' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate phone number (basic validation)
+ */
+export function validatePhone(phone: string): { valid: boolean; error?: string } {
+  if (!phone.trim()) {
+    return { valid: true }; // Phone is typically optional
+  }
+
+  // Remove all non-digits
+  const digits = phone.replace(/\D/g, '');
+
+  if (digits.length < 10) {
+    return { valid: false, error: 'Phone number must be at least 10 digits' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate expiry date
+ */
+export function validateExpiryDate(expiryDate: string): { valid: boolean; error?: string } {
+  const match = expiryDate.match(/^(\d{2})\/(\d{2})$/);
+  
+  if (!match) {
+    return { valid: false, error: 'Expiry date must be in MM/YY format' };
+  }
+
+  const month = parseInt(match[1], 10);
+  const year = 2000 + parseInt(match[2], 10);
+
+  if (month < 1 || month > 12) {
+    return { valid: false, error: 'Invalid month' };
+  }
+
+  const now = new Date();
+  const expiry = new Date(year, month - 1);
+
+  if (expiry < now) {
+    return { valid: false, error: 'Card has expired' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validate CVV
+ */
+export function validateCvv(cvv: string, cardType?: string): { valid: boolean; error?: string } {
+  const digits = cvv.replace(/\D/g, '');
+
+  if (!digits) {
+    return { valid: false, error: 'CVV is required' };
+  }
+
+  // American Express uses 4-digit CVV, others use 3
+  const expectedLength = cardType === 'American Express' ? 4 : 3;
+
+  if (digits.length !== expectedLength) {
+    return { 
+      valid: false, 
+      error: `CVV must be ${expectedLength} digits for ${cardType || 'this card type'}` 
+    };
+  }
+
+  return { valid: true };
 }

@@ -1,35 +1,43 @@
-/**
- * Fat Zebra Next.js Package - Payment Form Component
- * Complete React payment form with validation and error handling
- */
+import React, { useState, useCallback, useEffect } from 'react';
+import { usePayment } from '../hooks/usePayment';
+import { 
+  formatCardNumber, 
+  formatExpiryDate, 
+  formatCvv,
+  validateCard,
+  validateEmail,
+  extractErrorMessage 
+} from '../utils';
+import type { PaymentFormProps, PaymentFormErrors, Customer } from '../types';
 
-import React, { useState, useCallback } from 'react';
-import type { 
-  PaymentFormProps, 
-  PaymentFormData, 
-  CardDetails, 
-  Customer, 
-  PaymentFormErrors 
-} from '../types';
-import { validateCard, formatCardNumber, formatExpiryDate, formatCvv } from '../utils';
+// Form-specific type with required string fields for better form handling
+interface FormCustomer {
+  email: string;
+  first_name: string;
+  last_name: string;
+}
 
-export function PaymentForm({ 
-  onSubmit, 
-  amount, 
-  currency = 'AUD', 
-  loading = false, 
-  enableTokenization = false, 
+interface FormData {
+  card_holder: string;
+  card_number: string;
+  card_expiry: string;
+  cvv: string;
+  customer: FormCustomer;
+}
+
+export const PaymentForm: React.FC<PaymentFormProps> = ({
+  amount,
+  currency = 'AUD',
+  loading: externalLoading = false,
+  enableTokenization = false,
   onTokenizationSuccess,
-  className = '' 
-}: PaymentFormProps) {
-  const [formData, setFormData] = useState<PaymentFormData>({
-    amount: amount || 0,
-    cardDetails: {
-      card_holder: '',
-      card_number: '',
-      card_expiry: '',
-      cvv: '',
-    },
+  className = '',
+}) => {
+  const [formData, setFormData] = useState<FormData>({
+    card_holder: '',
+    card_number: '',
+    card_expiry: '',
+    cvv: '',
     customer: {
       email: '',
       first_name: '',
@@ -38,310 +46,179 @@ export function PaymentForm({
   });
 
   const [errors, setErrors] = useState<PaymentFormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+
+  const { processPayment, loading: paymentLoading, error: paymentError } = usePayment({
+    onSuccess: (response) => {
+      console.log('Payment successful:', response);
+      if (enableTokenization && onTokenizationSuccess && response.authorization) {
+        onTokenizationSuccess(response.authorization);
+      }
+    },
+    onError: (error) => {
+      console.error('Payment error:', error);
+      setErrors(prev => ({
+        ...prev,
+        general: extractErrorMessage(error)
+      }));
+    }
+  });
+
+  const isFormLoading = externalLoading || paymentLoading;
+
+  // Validate form on changes
+  useEffect(() => {
+    validateForm();
+  }, [formData]);
+
+  const validateForm = useCallback(() => {
+    const newErrors: PaymentFormErrors = {};
+
+    // Validate card details
+    if (touched.card_holder && !formData.card_holder.trim()) {
+      newErrors.card_holder = 'Cardholder name is required';
+    }
+
+    if (touched.card_number) {
+      const cardValidation = validateCard({
+        card_holder: formData.card_holder,
+        card_number: formData.card_number,
+        card_expiry: formData.card_expiry,
+        cvv: formData.cvv
+      });
+      
+      if (!cardValidation.valid && cardValidation.errors.length > 0) {
+        newErrors.card_number = cardValidation.errors[0];
+      }
+    }
+
+    if (touched.card_expiry && !formData.card_expiry.match(/^\d{2}\/\d{2}$/)) {
+      newErrors.card_expiry = 'Please enter a valid expiry date (MM/YY)';
+    }
+
+    if (touched.cvv && (!formData.cvv || formData.cvv.length < 3)) {
+      newErrors.cvv = 'Please enter a valid CVV';
+    }
+
+    // Validate email if provided
+    if (formData.customer.email && touched.customer_email) {
+      const emailValidation = validateEmail(formData.customer.email);
+      if (!emailValidation.valid) {
+        newErrors.general = emailValidation.error || 'Invalid email address';
+      }
+    }
+
+    setErrors(newErrors);
+  }, [formData, touched]);
 
   const handleInputChange = useCallback((field: string, value: string) => {
     setFormData(prev => {
-      if (field.startsWith('card_')) {
-        const cardField = field.replace('card_', '') as keyof CardDetails;
-        let formattedValue = value;
-
-        // Apply formatting
-        switch (cardField) {
-          case 'card_number':
-            formattedValue = formatCardNumber(value);
-            break;
-          case 'card_expiry':
-            formattedValue = formatExpiryDate(value);
-            break;
-          case 'cvv':
-            formattedValue = formatCvv(value);
-            break;
-        }
-
-        return {
-          ...prev,
-          cardDetails: {
-            ...prev.cardDetails,
-            [cardField]: formattedValue,
-          },
-        };
-      }
-
       if (field.startsWith('customer_')) {
-        const customerField = field.replace('customer_', '') as keyof Customer;
+        const customerField = field.replace('customer_', '') as keyof FormCustomer;
         return {
           ...prev,
           customer: {
             ...prev.customer,
-            [customerField]: value,
-          },
+            [customerField]: value
+          }
         };
+      }
+
+      // Format certain fields
+      let formattedValue = value;
+      if (field === 'card_number') {
+        formattedValue = formatCardNumber(value);
+      } else if (field === 'card_expiry') {
+        formattedValue = formatExpiryDate(value);
+      } else if (field === 'cvv') {
+        formattedValue = formatCvv(value);
       }
 
       return {
         ...prev,
-        [field]: field === 'amount' ? parseFloat(value) || 0 : value,
+        [field]: formattedValue
       };
     });
 
-    // Clear field error when user starts typing
-    if (errors[field as keyof PaymentFormErrors]) {
-      setErrors(prev => ({
-        ...prev,
-        [field]: undefined,
-      }));
-    }
-  }, [errors]);
-
-  const validateForm = useCallback((): boolean => {
-    const newErrors: PaymentFormErrors = {};
-
-    // Validate amount
-    if (!formData.amount || formData.amount <= 0) {
-      newErrors.amount = 'Amount must be greater than 0';
-    }
-
-    // Validate card details
-    const cardValidation = validateCard(formData.cardDetails);
-    if (!cardValidation.valid) {
-      cardValidation.errors.forEach(error => {
-        if (error.includes('holder')) {
-          newErrors.card_holder = error;
-        } else if (error.includes('number')) {
-          newErrors.card_number = error;
-        } else if (error.includes('expiry')) {
-          newErrors.card_expiry = error;
-        } else if (error.includes('CVV')) {
-          newErrors.cvv = error;
-        }
-      });
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [formData]);
+    // Mark field as touched
+    setTouched(prev => ({
+      ...prev,
+      [field]: true
+    }));
+  }, []);
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (isSubmitting || loading) {
-      return;
-    }
 
-    if (!validateForm()) {
-      return;
-    }
+    // Mark all fields as touched for validation
+    setTouched({
+      card_holder: true,
+      card_number: true,
+      card_expiry: true,
+      cvv: true,
+      customer_email: true,
+    });
 
-    setIsSubmitting(true);
+    // Clear previous errors
     setErrors({});
 
     try {
-      await onSubmit(formData);
-      
-      if (enableTokenization && onTokenizationSuccess) {
-        // In a real implementation, this would come from the payment response
-        onTokenizationSuccess('token_placeholder');
+      // Convert form customer data to API customer data (filtering out empty strings)
+      const customerData: Customer = {};
+      if (formData.customer.email.trim()) {
+        customerData.email = formData.customer.email.trim();
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Payment failed';
-      setErrors({ general: errorMessage });
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [formData, onSubmit, validateForm, isSubmitting, loading, enableTokenization, onTokenizationSuccess]);
+      if (formData.customer.first_name.trim()) {
+        customerData.first_name = formData.customer.first_name.trim();
+      }
+      if (formData.customer.last_name.trim()) {
+        customerData.last_name = formData.customer.last_name.trim();
+      }
 
-  const isFormLoading = loading || isSubmitting;
+      await processPayment({
+        amount,
+        currency,
+        card_holder: formData.card_holder,
+        card_number: formData.card_number.replace(/\s/g, ''),
+        card_expiry: formData.card_expiry,
+        cvv: formData.cvv,
+        ...(Object.keys(customerData).length > 0 && { customer: customerData }),
+        reference: `PAY-${Date.now()}`,
+      });
+    } catch (error) {
+      // Error is handled by the usePayment hook
+      console.error('Form submission error:', error);
+    }
+  }, [amount, currency, formData, processPayment]);
 
   return (
     <form onSubmit={handleSubmit} className={`fat-zebra-payment-form ${className}`}>
-      {/* Amount field (if not provided as prop) */}
-      {!amount && (
-        <div className="form-group">
-          <label htmlFor="amount">
-            Amount ({currency})
-            <span className="required">*</span>
-          </label>
-          <input
-            id="amount"
-            type="number"
-            step="0.01"
-            min="0.01"
-            value={formData.amount || ''}
-            onChange={(e) => handleInputChange('amount', e.target.value)}
-            disabled={isFormLoading}
-            className={errors.amount ? 'error' : ''}
-            placeholder="0.00"
-          />
-          {errors.amount && <span className="error-message">{errors.amount}</span>}
-        </div>
-      )}
-
-      {/* Card holder name */}
-      <div className="form-group">
-        <label htmlFor="card_holder">
-          Card Holder Name
-          <span className="required">*</span>
-        </label>
-        <input
-          id="card_holder"
-          type="text"
-          value={formData.cardDetails.card_holder}
-          onChange={(e) => handleInputChange('card_card_holder', e.target.value)}
-          disabled={isFormLoading}
-          className={errors.card_holder ? 'error' : ''}
-          placeholder="John Smith"
-          autoComplete="cc-name"
-        />
-        {errors.card_holder && <span className="error-message">{errors.card_holder}</span>}
-      </div>
-
-      {/* Card number */}
-      <div className="form-group">
-        <label htmlFor="card_number">
-          Card Number
-          <span className="required">*</span>
-        </label>
-        <input
-          id="card_number"
-          type="text"
-          value={formData.cardDetails.card_number}
-          onChange={(e) => handleInputChange('card_card_number', e.target.value)}
-          disabled={isFormLoading}
-          className={errors.card_number ? 'error' : ''}
-          placeholder="1234 5678 9012 3456"
-          autoComplete="cc-number"
-          maxLength={23} // Formatted number with spaces
-        />
-        {errors.card_number && <span className="error-message">{errors.card_number}</span>}
-      </div>
-
-      {/* Expiry and CVV row */}
-      <div className="form-row">
-        <div className="form-group">
-          <label htmlFor="card_expiry">
-            Expiry Date
-            <span className="required">*</span>
-          </label>
-          <input
-            id="card_expiry"
-            type="text"
-            value={formData.cardDetails.card_expiry}
-            onChange={(e) => handleInputChange('card_card_expiry', e.target.value)}
-            disabled={isFormLoading}
-            className={errors.card_expiry ? 'error' : ''}
-            placeholder="MM/YY"
-            autoComplete="cc-exp"
-            maxLength={5}
-          />
-          {errors.card_expiry && <span className="error-message">{errors.card_expiry}</span>}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="cvv">
-            CVV
-            <span className="required">*</span>
-          </label>
-          <input
-            id="cvv"
-            type="text"
-            value={formData.cardDetails.cvv}
-            onChange={(e) => handleInputChange('card_cvv', e.target.value)}
-            disabled={isFormLoading}
-            className={errors.cvv ? 'error' : ''}
-            placeholder="123"
-            autoComplete="cc-csc"
-            maxLength={4}
-          />
-          {errors.cvv && <span className="error-message">{errors.cvv}</span>}
-        </div>
-      </div>
-
-      {/* Customer information */}
-      <div className="customer-section">
-        <h3>Customer Information</h3>
-        
-        <div className="form-group">
-          <label htmlFor="customer_email">Email</label>
-          <input
-            id="customer_email"
-            type="email"
-            value={formData.customer?.email || ''}
-            onChange={(e) => handleInputChange('customer_email', e.target.value)}
-            disabled={isFormLoading}
-            placeholder="john@example.com"
-            autoComplete="email"
-          />
-        </div>
-
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="customer_first_name">First Name</label>
-            <input
-              id="customer_first_name"
-              type="text"
-              value={formData.customer?.first_name || ''}
-              onChange={(e) => handleInputChange('customer_first_name', e.target.value)}
-              disabled={isFormLoading}
-              placeholder="John"
-              autoComplete="given-name"
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="customer_last_name">Last Name</label>
-            <input
-              id="customer_last_name"
-              type="text"
-              value={formData.customer?.last_name || ''}
-              onChange={(e) => handleInputChange('customer_last_name', e.target.value)}
-              disabled={isFormLoading}
-              placeholder="Smith"
-              autoComplete="family-name"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* General error */}
-      {errors.general && (
-        <div className="error-message general-error">
-          {errors.general}
-        </div>
-      )}
-
-      {/* Submit button */}
-      <button
-        type="submit"
-        disabled={isFormLoading}
-        className={`submit-button ${isFormLoading ? 'loading' : ''}`}
-      >
-        {isFormLoading ? (
-          <>
-            <span className="spinner"></span>
-            Processing...
-          </>
-        ) : (
-          `Pay ${amount ? `${currency} ${amount.toFixed(2)}` : ''}`
-        )}
-      </button>
-
-      {/* Tokenization info */}
-      {enableTokenization && (
-        <div className="tokenization-info">
-          <small>
-            Your card details will be securely tokenized for future payments.
-          </small>
-        </div>
-      )}
-
-      {/* Basic styles */}
-      <style jsx>{`
+      <style>{`
         .fat-zebra-payment-form {
           max-width: 500px;
           margin: 0 auto;
-          padding: 20px;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          padding: 24px;
+          border: 1px solid #e1e5e9;
+          border-radius: 8px;
+          background: #ffffff;
+        }
+
+        .fat-zebra-payment-form h2 {
+          margin: 0 0 24px 0;
+          font-size: 24px;
+          font-weight: 600;
+          color: #2d3748;
+        }
+
+        .form-section {
+          margin-bottom: 24px;
+        }
+
+        .form-section h3 {
+          margin: 0 0 16px 0;
+          font-size: 18px;
+          font-weight: 500;
+          color: #4a5568;
         }
 
         .form-group {
@@ -357,74 +234,59 @@ export function PaymentForm({
           flex: 1;
         }
 
-        label {
+        .form-group label {
           display: block;
           margin-bottom: 4px;
+          font-size: 14px;
           font-weight: 500;
-          color: #333;
+          color: #2d3748;
         }
 
-        .required {
-          color: #e74c3c;
-          margin-left: 2px;
-        }
-
-        input {
+        .form-group input {
           width: 100%;
           padding: 12px;
-          border: 1px solid #ddd;
+          border: 1px solid #cbd5e0;
           border-radius: 4px;
           font-size: 16px;
           transition: border-color 0.2s;
           box-sizing: border-box;
         }
 
-        input:focus {
+        .form-group input:focus {
           outline: none;
-          border-color: #3498db;
-          box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.1);
+          border-color: #4299e1;
+          box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
         }
 
-        input.error {
-          border-color: #e74c3c;
-        }
-
-        input:disabled {
-          background-color: #f8f9fa;
+        .form-group input:disabled {
+          background-color: #f7fafc;
           cursor: not-allowed;
+        }
+
+        .form-group input.error {
+          border-color: #e53e3e;
         }
 
         .error-message {
           display: block;
-          color: #e74c3c;
-          font-size: 14px;
           margin-top: 4px;
+          font-size: 12px;
+          color: #e53e3e;
         }
 
         .general-error {
-          background-color: #fdf2f2;
-          border: 1px solid #e74c3c;
-          border-radius: 4px;
-          padding: 12px;
           margin: 16px 0;
-        }
-
-        .customer-section {
-          margin-top: 24px;
-          padding-top: 16px;
-          border-top: 1px solid #eee;
-        }
-
-        .customer-section h3 {
-          margin: 0 0 16px 0;
-          font-size: 18px;
-          color: #333;
+          padding: 12px;
+          background-color: #fed7d7;
+          border: 1px solid #feb2b2;
+          border-radius: 4px;
+          color: #c53030;
         }
 
         .submit-button {
           width: 100%;
           padding: 16px;
-          background-color: #3498db;
+          background-color: #4299e1;
           color: white;
           border: none;
           border-radius: 4px;
@@ -439,12 +301,16 @@ export function PaymentForm({
         }
 
         .submit-button:hover:not(:disabled) {
-          background-color: #2980b9;
+          background-color: #3182ce;
         }
 
         .submit-button:disabled {
-          background-color: #bdc3c7;
+          background-color: #a0aec0;
           cursor: not-allowed;
+        }
+
+        .submit-button.loading {
+          background-color: #a0aec0;
         }
 
         .spinner {
@@ -463,15 +329,191 @@ export function PaymentForm({
         }
 
         .tokenization-info {
-          margin-top: 12px;
+          margin-top: 16px;
+          padding: 12px;
+          background-color: #ebf8ff;
+          border: 1px solid #bee3f8;
+          border-radius: 4px;
+          font-size: 12px;
+          color: #2b6cb0;
+        }
+
+        .amount-display {
+          margin-bottom: 24px;
+          padding: 16px;
+          background-color: #f7fafc;
+          border-radius: 4px;
           text-align: center;
         }
 
-        .tokenization-info small {
-          color: #666;
-          font-size: 12px;
+        .amount-display .amount {
+          font-size: 24px;
+          font-weight: 600;
+          color: #2d3748;
+        }
+
+        .amount-display .currency {
+          font-size: 14px;
+          color: #4a5568;
+          margin-left: 4px;
         }
       `}</style>
+
+      <h2>Payment Details</h2>
+
+      {/* Amount display */}
+      <div className="amount-display">
+        <span className="amount">{amount.toFixed(2)}</span>
+        <span className="currency">{currency}</span>
+      </div>
+
+      {/* Card details section */}
+      <div className="form-section">
+        <h3>Card Information</h3>
+        
+        <div className="form-group">
+          <label htmlFor="card_holder">Cardholder Name</label>
+          <input
+            id="card_holder"
+            type="text"
+            value={formData.card_holder}
+            onChange={(e) => handleInputChange('card_holder', e.target.value)}
+            disabled={isFormLoading}
+            className={errors.card_holder ? 'error' : ''}
+            placeholder="John Smith"
+            autoComplete="cc-name"
+          />
+          {errors.card_holder && <span className="error-message">{errors.card_holder}</span>}
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="card_number">Card Number</label>
+          <input
+            id="card_number"
+            type="text"
+            value={formData.card_number}
+            onChange={(e) => handleInputChange('card_number', e.target.value)}
+            disabled={isFormLoading}
+            className={errors.card_number ? 'error' : ''}
+            placeholder="1234 5678 9012 3456"
+            autoComplete="cc-number"
+            maxLength={19}
+          />
+          {errors.card_number && <span className="error-message">{errors.card_number}</span>}
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="card_expiry">Expiry Date</label>
+            <input
+              id="card_expiry"
+              type="text"
+              value={formData.card_expiry}
+              onChange={(e) => handleInputChange('card_expiry', e.target.value)}
+              disabled={isFormLoading}
+              className={errors.card_expiry ? 'error' : ''}
+              placeholder="MM/YY"
+              autoComplete="cc-exp"
+              maxLength={5}
+            />
+            {errors.card_expiry && <span className="error-message">{errors.card_expiry}</span>}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="cvv">CVV</label>
+            <input
+              id="cvv"
+              type="text"
+              value={formData.cvv}
+              onChange={(e) => handleInputChange('cvv', e.target.value)}
+              disabled={isFormLoading}
+              className={errors.cvv ? 'error' : ''}
+              placeholder="123"
+              autoComplete="cc-csc"
+              maxLength={4}
+            />
+            {errors.cvv && <span className="error-message">{errors.cvv}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Customer information */}
+      <div className="form-section">
+        <h3>Customer Information</h3>
+        
+        <div className="form-group">
+          <label htmlFor="customer_email">Email</label>
+          <input
+            id="customer_email"
+            type="email"
+            value={formData.customer.email}
+            onChange={(e) => handleInputChange('customer_email', e.target.value)}
+            disabled={isFormLoading}
+            placeholder="john@example.com"
+            autoComplete="email"
+          />
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="customer_first_name">First Name</label>
+            <input
+              id="customer_first_name"
+              type="text"
+              value={formData.customer.first_name}
+              onChange={(e) => handleInputChange('customer_first_name', e.target.value)}
+              disabled={isFormLoading}
+              placeholder="John"
+              autoComplete="given-name"
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="customer_last_name">Last Name</label>
+            <input
+              id="customer_last_name"
+              type="text"
+              value={formData.customer.last_name}
+              onChange={(e) => handleInputChange('customer_last_name', e.target.value)}
+              disabled={isFormLoading}
+              placeholder="Smith"
+              autoComplete="family-name"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* General error */}
+      {(errors.general || paymentError) && (
+        <div className="error-message general-error">
+          {errors.general || paymentError}
+        </div>
+      )}
+
+      {/* Submit button */}
+      <button
+        type="submit"
+        disabled={isFormLoading}
+        className={`submit-button ${isFormLoading ? 'loading' : ''}`}
+      >
+        {isFormLoading ? (
+          <>
+            <span className="spinner"></span>
+            Processing...
+          </>
+        ) : (
+          `Pay ${currency} ${amount.toFixed(2)}`
+        )}
+      </button>
+
+      {/* Tokenization info */}
+      {enableTokenization && (
+        <div className="tokenization-info">
+          <small>
+            Your card details will be securely tokenized for future payments.
+          </small>
+        </div>
+      )}
     </form>
   );
-}
+};

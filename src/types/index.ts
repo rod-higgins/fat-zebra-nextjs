@@ -1,15 +1,13 @@
 /**
- * Fat Zebra Next.js Package - Type Definitions
- * Complete type definitions for the Fat Zebra payment gateway
+ * Type definitions for Fat Zebra Next.js Package
  */
 
-// Core Configuration Types
+// Configuration Types
 export interface FatZebraConfig {
   username: string;
   token: string;
-  isTestMode?: boolean;
+  sandbox?: boolean;
   gatewayUrl?: string;
-  apiVersion?: string;
   timeout?: number;
 }
 
@@ -22,38 +20,41 @@ export interface CardDetails {
 }
 
 export interface Customer {
-  id?: string;
-  email?: string;
   first_name?: string;
   last_name?: string;
+  email?: string;
   phone?: string;
-  address?: {
-    line1?: string;
-    line2?: string;
-    city?: string;
-    state?: string;
-    postal_code?: string;
-    country?: string;
-  };
+  address?: string;
+  city?: string;
+  state?: string;
+  postcode?: string;
+  country?: string;
+  ip_address?: string;
+}
+
+export interface CardValidationResult {
+  valid: boolean;
+  errors: string[];
+  type?: string;
 }
 
 // Request Types
 export interface PurchaseRequest {
   amount: number;
-  currency: string;
-  reference: string;
-  card_details?: CardDetails;
+  currency?: string;
+  reference?: string;
+  customer_ip?: string;
+  card_holder: string;
+  card_number: string;
+  card_expiry: string;
+  cvv: string;
   customer?: Customer;
   metadata?: Record<string, any>;
 }
 
-export interface AuthorizationRequest {
+export interface AuthorizationRequest extends Omit<PurchaseRequest, 'amount'> {
   amount: number;
-  currency: string;
-  reference: string;
-  card_details?: CardDetails;
-  customer?: Customer;
-  metadata?: Record<string, any>;
+  capture?: boolean;
 }
 
 export interface RefundRequest {
@@ -64,16 +65,18 @@ export interface RefundRequest {
 }
 
 export interface TokenizationRequest {
-  card_details: CardDetails;
-  customer?: Customer;
+  card_holder: string;
+  card_number: string;
+  card_expiry: string;
+  cvv?: string;
 }
 
 // Response Types
 export interface FatZebraResponse<T = any> {
   successful: boolean;
-  response: T;
-  errors: string[];
-  test: boolean;
+  response?: T;
+  errors?: string[];
+  test?: boolean;
 }
 
 export interface TransactionResponse {
@@ -81,13 +84,16 @@ export interface TransactionResponse {
   amount: number;
   currency: string;
   reference: string;
-  authorization: string;
-  successful: boolean;
   message: string;
+  successful: boolean;
+  settlement_date: string;
+  transaction_id: string;
   card_holder: string;
   card_number: string;
   card_type: string;
-  settlement_date?: string;
+  authorization: string;
+  captured: boolean;
+  created_at: string;
   metadata?: Record<string, any>;
 }
 
@@ -97,44 +103,36 @@ export interface TokenizationResponse {
   card_number: string;
   card_type: string;
   expiry_date: string;
+  created_at: string;
 }
 
 export interface SettlementResponse {
   id: string;
-  batch_id: string;
-  amount: number;
-  currency: string;
-  settled_at: string;
+  settlement_date: string;
   transactions: TransactionResponse[];
-}
-
-// Validation Types
-export interface CardValidationResult {
-  valid: boolean;
-  errors: string[];
-  type?: string;
+  total_amount: number;
+  currency: string;
 }
 
 // Hook Types
 export interface UsePaymentOptions {
-  username?: string;
-  token?: string;
-  isTestMode?: boolean;
-  enableTokenization?: boolean;
+  onSuccess?: (response: TransactionResponse) => void;
+  onError?: (error: FatZebraError) => void;
+  enableRetry?: boolean;
+  maxRetries?: number;
+  retryDelay?: number;
 }
 
 export interface UsePaymentResult {
-  isLoading: boolean;
+  processPayment: (data: PurchaseRequest) => Promise<TransactionResponse>;
+  loading: boolean;
   error: string | null;
-  processPayment: (data: PaymentFormData) => Promise<TransactionResponse>;
-  tokenizeCard: (cardDetails: CardDetails) => Promise<string>;
-  clearError: () => void;
+  reset: () => void;
 }
 
 // Component Types
 export interface PaymentFormProps {
-  onSubmit: (data: PaymentFormData) => Promise<void>;
-  amount?: number;
+  amount: number;
   currency?: string;
   loading?: boolean;
   enableTokenization?: boolean;
@@ -230,6 +228,44 @@ export function isErrorWithMessage(error: unknown): error is { message: string }
 
 export function isErrorWithErrors(error: unknown): error is { errors: string[] } {
   return typeof error === 'object' && error !== null && 'errors' in error && Array.isArray((error as any).errors);
+}
+
+// Error Message Extraction Utility
+export function extractErrorMessage(error: unknown): string {
+  if (isFatZebraError(error)) {
+    return error.errors.length > 0 ? error.errors[0] : error.message;
+  }
+  
+  if (isErrorWithMessage(error)) {
+    return error.message;
+  }
+  
+  if (typeof error === 'string') {
+    return error;
+  }
+  
+  return 'An unknown error occurred';
+}
+
+// Error Details Extraction Utility
+export function extractErrorDetails(error: unknown): string[] {
+  if (isFatZebraError(error)) {
+    return error.errors.length > 0 ? error.errors : [error.message];
+  }
+  
+  if (isErrorWithErrors(error)) {
+    return error.errors;
+  }
+  
+  if (isErrorWithMessage(error)) {
+    return [error.message];
+  }
+  
+  if (typeof error === 'string') {
+    return [error];
+  }
+  
+  return ['An unknown error occurred'];
 }
 
 // Utility Types

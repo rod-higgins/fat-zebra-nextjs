@@ -1,4 +1,4 @@
-import { CardValidationResult } from '../types';
+import type { CardValidationResult } from '../types';
 
 /**
  * Card number validation and formatting utilities
@@ -71,8 +71,8 @@ export function validateCard(cardNumber: string): CardValidationResult {
 
   if (!digits) {
     return {
-      isValid: false,
-      cardType: 'Unknown',
+      valid: false,
+      type: 'Unknown',
       errors: ['Card number is required']
     };
   }
@@ -112,8 +112,8 @@ export function validateCard(cardNumber: string): CardValidationResult {
   }
 
   return {
-    isValid: errors.length === 0,
-    cardType,
+    valid: errors.length === 0,
+    type: cardType,
     errors
   };
 }
@@ -157,36 +157,36 @@ export function formatCvv(value: string): string {
 }
 
 // Validate expiry date
-export function validateExpiryDate(expiryDate: string): { isValid: boolean; error?: string } {
+export function validateExpiryDate(expiryDate: string): { valid: boolean; error?: string } {
   const match = expiryDate.match(/^(\d{2})\/(\d{2})$/);
   
   if (!match) {
-    return { isValid: false, error: 'Expiry date must be in MM/YY format' };
+    return { valid: false, error: 'Expiry date must be in MM/YY format' };
   }
 
   const month = parseInt(match[1], 10);
   const year = 2000 + parseInt(match[2], 10);
 
   if (month < 1 || month > 12) {
-    return { isValid: false, error: 'Invalid month' };
+    return { valid: false, error: 'Invalid month' };
   }
 
   const now = new Date();
   const expiry = new Date(year, month - 1);
 
   if (expiry < now) {
-    return { isValid: false, error: 'Card has expired' };
+    return { valid: false, error: 'Card has expired' };
   }
 
-  return { isValid: true };
+  return { valid: true };
 }
 
 // Validate CVV
-export function validateCvv(cvv: string, cardType?: string): { isValid: boolean; error?: string } {
+export function validateCvv(cvv: string, cardType?: string): { valid: boolean; error?: string } {
   const digits = cvv.replace(/\D/g, '');
 
   if (!digits) {
-    return { isValid: false, error: 'CVV is required' };
+    return { valid: false, error: 'CVV is required' };
   }
 
   // American Express uses 4-digit CVV, others use 3
@@ -194,42 +194,42 @@ export function validateCvv(cvv: string, cardType?: string): { isValid: boolean;
 
   if (digits.length !== expectedLength) {
     return { 
-      isValid: false, 
+      valid: false, 
       error: `CVV must be ${expectedLength} digits for ${cardType || 'this card type'}` 
     };
   }
 
-  return { isValid: true };
+  return { valid: true };
 }
 
 // Validate email address
-export function validateEmail(email: string): { isValid: boolean; error?: string } {
+export function validateEmail(email: string): { valid: boolean; error?: string } {
   if (!email.trim()) {
-    return { isValid: false, error: 'Email is required' };
+    return { valid: false, error: 'Email is required' };
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
-    return { isValid: false, error: 'Invalid email format' };
+    return { valid: false, error: 'Invalid email format' };
   }
 
-  return { isValid: true };
+  return { valid: true };
 }
 
 // Validate phone number (basic validation)
-export function validatePhone(phone: string): { isValid: boolean; error?: string } {
+export function validatePhone(phone: string): { valid: boolean; error?: string } {
   if (!phone.trim()) {
-    return { isValid: true }; // Phone is typically optional
+    return { valid: true }; // Phone is typically optional
   }
 
   // Remove all non-digits
   const digits = phone.replace(/\D/g, '');
 
   if (digits.length < 10) {
-    return { isValid: false, error: 'Phone number must be at least 10 digits' };
+    return { valid: false, error: 'Phone number must be at least 10 digits' };
   }
 
-  return { isValid: true };
+  return { valid: true };
 }
 
 // Sanitize card number for logging (show only last 4 digits)
@@ -249,17 +249,17 @@ export function generateReference(prefix: string = 'ORDER'): string {
 }
 
 // Validate Australian postcode
-export function validateAustralianPostcode(postcode: string): { isValid: boolean; error?: string } {
+export function validateAustralianPostcode(postcode: string): { valid: boolean; error?: string } {
   if (!postcode.trim()) {
-    return { isValid: true }; // Postcode might be optional
+    return { valid: true }; // Postcode might be optional
   }
 
   const postcodeRegex = /^\d{4}$/;
   if (!postcodeRegex.test(postcode)) {
-    return { isValid: false, error: 'Australian postcode must be 4 digits' };
+    return { valid: false, error: 'Australian postcode must be 4 digits' };
   }
 
-  return { isValid: true };
+  return { valid: true };
 }
 
 // Format currency amount
@@ -279,18 +279,18 @@ export function parseCurrencyAmount(value: string): number {
 }
 
 // Validate amount
-export function validateAmount(amount: number | string): { isValid: boolean; error?: string } {
+export function validateAmount(amount: number | string): { valid: boolean; error?: string } {
   const numAmount = typeof amount === 'string' ? parseCurrencyAmount(amount) : amount;
 
   if (isNaN(numAmount) || numAmount <= 0) {
-    return { isValid: false, error: 'Amount must be greater than 0' };
+    return { valid: false, error: 'Amount must be greater than 0' };
   }
 
   if (numAmount > 999999.99) {
-    return { isValid: false, error: 'Amount cannot exceed $999,999.99' };
+    return { valid: false, error: 'Amount cannot exceed $999,999.99' };
   }
 
-  return { isValid: true };
+  return { valid: true };
 }
 
 // Check if payment is test transaction

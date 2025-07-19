@@ -3,19 +3,32 @@
  * Entry point for the Fat Zebra Next.js payment library
  */
 
-// Core client exports
-export { 
+// Import for local use and re-export
+import { 
   FatZebraClient, 
   createFatZebraClient, 
-  FatZebraError, 
   handleFatZebraResponse 
 } from './lib/client';
 
-// React components
-export { PaymentForm } from './components';
+import { FatZebraError, TEST_CARDS, CURRENCIES } from './types';
+import { PaymentForm } from './components/PaymentForm';
+import { usePayment, usePaymentWithRetry } from './hooks/usePayment';
 
-// React hooks
-export { usePayment, usePaymentWithRetry } from './hooks';
+// Re-export core client functions
+export { 
+  FatZebraClient, 
+  createFatZebraClient, 
+  handleFatZebraResponse 
+};
+
+// Re-export error classes
+export { FatZebraError };
+
+// Re-export React components
+export { PaymentForm };
+
+// Re-export React hooks
+export { usePayment, usePaymentWithRetry };
 
 // Utility functions
 export {
@@ -63,11 +76,11 @@ export type {
   TransactionType,
 } from './types';
 
-// Constants
-export { TEST_CARDS, CURRENCIES } from './types';
+// Re-export constants
+export { TEST_CARDS, CURRENCIES };
 
-// Default export for convenience
-export default {
+// Default export for convenience - now using imported values
+const FatZebraNextJS = {
   createFatZebraClient,
   FatZebraError,
   handleFatZebraResponse,
@@ -76,3 +89,5 @@ export default {
   TEST_CARDS,
   CURRENCIES,
 };
+
+export default FatZebraNextJS;

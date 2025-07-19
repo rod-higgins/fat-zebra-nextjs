@@ -1,293 +1,194 @@
-/**
- * Fat Zebra Next.js Package - usePayment Hook
- * React hook for handling payment processing
- */
-
 import { useState, useCallback, useRef } from 'react';
-import type { 
-  PaymentFormData, 
-  UsePaymentOptions, 
-  UsePaymentResult, 
-  CardDetails, 
-  TransactionResponse 
-} from '../types';
-import { FatZebraError, extractErrorMessage } from '../types';
-import { validateCard, extractErrorDetails } from '../utils';
+import { FatZebraError } from '../types';
+import { validateCard, extractErrorMessage } from '../utils';
+import type { UsePaymentOptions, UsePaymentResult, PurchaseRequest, TransactionResponse } from '../types';
 
-/**
- * React hook for payment processing
- */
 export function usePayment(options: UsePaymentOptions = {}): UsePaymentResult {
-  const [isLoading, setIsLoading] = useState(false);
+  const {
+    onSuccess,
+    onError,
+    enableRetry = false,
+    maxRetries = 3,
+    retryDelay = 1000
+  } = options;
+
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const {
-    username = process.env.NEXT_PUBLIC_FATZEBRA_USERNAME,
-    token = process.env.NEXT_PUBLIC_FATZEBRA_TOKEN,
-    isTestMode = true,
-    enableTokenization = false,
-  } = options;
-
-  const clearError = useCallback(() => {
+  const processPayment = useCallback(async (data: PurchaseRequest): Promise<TransactionResponse> => {
+    setLoading(true);
     setError(null);
-  }, []);
 
-  const processPayment = useCallback(async (data: PaymentFormData): Promise<TransactionResponse> => {
-    // Validate inputs
-    if (!username || !token) {
-      const errorMsg = 'Payment credentials not configured';
-      setError(errorMsg);
-      throw new FatZebraError(errorMsg);
-    }
-
-    // Validate card details
-    const cardValidation = validateCard(data.cardDetails);
-    if (!cardValidation.valid) {
-      const errorMsg = cardValidation.errors[0];
-      setError(errorMsg);
-      throw new FatZebraError('Card validation failed', cardValidation.errors);
-    }
-
-    // Cancel any previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Create new abort controller
+    // Create abort controller for this request
     abortControllerRef.current = new AbortController();
 
-    setIsLoading(true);
-    setError(null);
-
     try {
+      // Validate card details before sending
+      const cardValidation = validateCard({
+        card_holder: data.card_holder,
+        card_number: data.card_number,
+        card_expiry: data.card_expiry,
+        cvv: data.cvv
+      });
+
+      if (!cardValidation.valid) {
+        throw new FatZebraError('Card validation failed', cardValidation.errors);
+      }
+
+      // Prepare the request
+      const requestData = {
+        ...data,
+        amount: Math.round(data.amount * 100), // Convert to cents
+        currency: data.currency || 'AUD',
+        reference: data.reference || `TXN-${Date.now()}`,
+        customer_ip: data.customer_ip || getClientIP(),
+      };
+
       const response = await fetch('/api/fat-zebra/purchase', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          amount: data.amount,
-          currency: 'AUD',
-          reference: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`.toUpperCase(),
-          card_details: data.cardDetails,
-          customer: data.customer,
-          username,
-          token,
-          metadata: {
-            sdk_version: '2.0.0',
-            test_mode: isTestMode,
-            tokenization_enabled: enableTokenization,
-          },
-        }),
+        body: JSON.stringify(requestData),
         signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new FatZebraError(
-          errorData.error || 'Payment failed',
-          errorData.details || ['Unknown error occurred']
+          errorData.message || `HTTP ${response.status}`,
+          errorData.errors || []
         );
       }
 
       const result = await response.json();
-      
-      if (!result.success) {
+
+      if (!result.successful) {
         throw new FatZebraError(
-          result.error || 'Payment failed',
-          result.details || ['Transaction was not successful']
+          result.response?.message || 'Transaction failed',
+          result.errors || []
         );
       }
 
-      return result.transaction;
+      const transaction = result.response;
+
+      // Call success handler if provided
+      if (onSuccess) {
+        onSuccess(transaction);
+      }
+
+      return transaction;
 
     } catch (err) {
       // Handle abort
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new FatZebraError('Payment was cancelled');
+        throw new FatZebraError('Request was cancelled');
       }
 
       const errorMessage = extractErrorMessage(err);
       setError(errorMessage);
-      throw err;
 
+      // Create FatZebraError if it's not already one
+      const fatZebraError = err instanceof FatZebraError 
+        ? err 
+        : new FatZebraError(errorMessage);
+
+      // Call error handler if provided
+      if (onError) {
+        onError(fatZebraError);
+      }
+
+      // Retry logic
+      if (enableRetry && maxRetries > 0) {
+        return retryPayment(data, maxRetries, retryDelay);
+      }
+
+      throw fatZebraError;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
       abortControllerRef.current = null;
     }
-  }, [username, token, isTestMode, enableTokenization]);
+  }, [onSuccess, onError, enableRetry, maxRetries, retryDelay]);
 
-  const tokenizeCard = useCallback(async (cardDetails: CardDetails): Promise<string> => {
-    if (!enableTokenization) {
-      const errorMsg = 'Tokenization is not enabled';
-      setError(errorMsg);
-      throw new FatZebraError(errorMsg);
+  const retryPayment = useCallback(async (
+    data: PurchaseRequest, 
+    retriesLeft: number, 
+    delay: number
+  ): Promise<TransactionResponse> => {
+    if (retriesLeft <= 0) {
+      throw new FatZebraError('Maximum retry attempts exceeded');
     }
 
-    if (!username || !token) {
-      const errorMsg = 'Payment credentials not configured';
-      setError(errorMsg);
-      throw new FatZebraError(errorMsg);
-    }
-
-    // Validate card details
-    const cardValidation = validateCard(cardDetails);
-    if (!cardValidation.valid) {
-      const errorMsg = cardValidation.errors[0];
-      setError(errorMsg);
-      throw new FatZebraError('Card validation failed', cardValidation.errors);
-    }
-
-    // Cancel any previous request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
-    // Create new abort controller
-    abortControllerRef.current = new AbortController();
-
-    setIsLoading(true);
-    setError(null);
+    // Wait before retrying
+    await new Promise(resolve => setTimeout(resolve, delay));
 
     try {
-      const response = await fetch('/api/fat-zebra/tokenize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          card_details: cardDetails,
-          username,
-          token,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new FatZebraError(
-          errorData.error || 'Tokenization failed',
-          errorData.details || ['Unknown error occurred']
-        );
-      }
-
-      const result = await response.json();
-      
-      if (!result.success) {
-        throw new FatZebraError(
-          result.error || 'Tokenization failed',
-          result.details || ['Tokenization was not successful']
-        );
-      }
-
-      return result.tokenization.token;
-
+      return await processPayment(data);
     } catch (err) {
-      // Handle abort
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw new FatZebraError('Tokenization was cancelled');
+      if (retriesLeft > 1) {
+        return retryPayment(data, retriesLeft - 1, delay * 2); // Exponential backoff
       }
-
-      const errorMessage = extractErrorMessage(err);
-      setError(errorMessage);
       throw err;
-
-    } finally {
-      setIsLoading(false);
-      abortControllerRef.current = null;
     }
-  }, [username, token, enableTokenization]);
+  }, [processPayment]);
 
-  // Cleanup on unmount
-  const cleanup = useCallback(() => {
+  const reset = useCallback(() => {
+    setError(null);
+    setLoading(false);
+    
+    // Cancel any ongoing request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
   }, []);
 
-  // Effect to cleanup on unmount would go here if we used useEffect
-  // For now, we'll rely on the caller to call cleanup if needed
-
   return {
-    isLoading,
-    error,
     processPayment,
-    tokenizeCard,
-    clearError,
+    loading,
+    error,
+    reset,
   };
 }
 
-/**
- * Hook for handling payment with automatic retry
- */
-export function usePaymentWithRetry(
-  options: UsePaymentOptions & { maxRetries?: number; retryDelay?: number } = {}
-): UsePaymentResult & { retryCount: number } {
-  const [retryCount, setRetryCount] = useState(0);
-  const baseHook = usePayment(options);
+// Helper function to get client IP (fallback)
+function getClientIP(): string {
+  // This is a fallback - in practice, the server should determine the real IP
+  return '127.0.0.1';
+}
+
+// Enhanced hook with additional retry capabilities
+export function usePaymentWithRetry(options: UsePaymentOptions & {
+  retryCondition?: (error: FatZebraError) => boolean;
+} = {}) {
+  const { retryCondition, ...paymentOptions } = options;
   
-  const { maxRetries = 3, retryDelay = 1000 } = options;
-
-  const processPaymentWithRetry = useCallback(async (data: PaymentFormData): Promise<TransactionResponse> => {
-    let lastError: unknown;
+  const defaultRetryCondition = (error: FatZebraError) => {
+    // Retry on network errors or temporary failures
+    const retryableErrors = [
+      'network error',
+      'timeout',
+      'server error',
+      'temporary unavailable'
+    ];
     
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        setRetryCount(attempt);
-        return await baseHook.processPayment(data);
-      } catch (error) {
-        lastError = error;
-        
-        if (attempt === maxRetries) {
-          break;
-        }
-        
-        // Only retry on network errors or server errors, not validation errors
-        if (error instanceof FatZebraError && error.errors.some(e => e.includes('validation'))) {
-          throw error;
-        }
-        
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, retryDelay * Math.pow(2, attempt)));
-      }
-    }
-    
-    throw lastError;
-  }, [baseHook.processPayment, maxRetries, retryDelay]);
-
-  const tokenizeCardWithRetry = useCallback(async (cardDetails: CardDetails): Promise<string> => {
-    let lastError: unknown;
-    
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        setRetryCount(attempt);
-        return await baseHook.tokenizeCard(cardDetails);
-      } catch (error) {
-        lastError = error;
-        
-        if (attempt === maxRetries) {
-          break;
-        }
-        
-        // Only retry on network errors or server errors, not validation errors
-        if (error instanceof FatZebraError && error.errors.some(e => e.includes('validation'))) {
-          throw error;
-        }
-        
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, retryDelay * Math.pow(2, attempt)));
-      }
-    }
-    
-    throw lastError;
-  }, [baseHook.tokenizeCard, maxRetries, retryDelay]);
-
-  return {
-    ...baseHook,
-    processPayment: processPaymentWithRetry,
-    tokenizeCard: tokenizeCardWithRetry,
-    retryCount,
+    return retryableErrors.some(keyword => 
+      error.message.toLowerCase().includes(keyword)
+    );
   };
+
+  const finalOptions: UsePaymentOptions = {
+    ...paymentOptions,
+    enableRetry: true,
+    onError: (error) => {
+      const shouldRetry = retryCondition ? retryCondition(error) : defaultRetryCondition(error);
+      
+      if (!shouldRetry && paymentOptions.onError) {
+        paymentOptions.onError(error);
+      }
+    }
+  };
+
+  return usePayment(finalOptions);
 }
