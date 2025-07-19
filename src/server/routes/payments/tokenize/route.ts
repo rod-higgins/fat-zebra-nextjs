@@ -1,43 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fatZebraClient, handleFatZebraResponse, FatZebraError } from '@/lib/fat-zebra-config';
+import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../../../../lib/client';
+import { extractErrorMessage } from '../../../../utils';
+import type { TokenizationRequest } from '../../../../types';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = await request.json();
-    const { cardDetails } = body;
-
-    if (!cardDetails) {
+    const body: TokenizationRequest = await request.json();
+    
+    if (!body.card_number || !body.card_expiry || !body.card_holder) {
       return NextResponse.json(
-        { error: 'Missing cardDetails' },
+        { successful: false, errors: ['Missing required card fields'] },
         { status: 400 }
       );
     }
 
-    const response = await fatZebraClient.tokenizeCard(cardDetails);
-    const token = handleFatZebraResponse(response);
-
-    return NextResponse.json({
-      success: true,
-      token: {
-        token: token.token,
-        card_number: token.card_number,
-        card_type: token.card_type,
-        card_expiry: token.card_expiry
-      }
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
     });
 
-  } catch (error) {
-    console.error('Card tokenization error:', error);
+    const response = await client.tokenize(body);
+    return NextResponse.json(handleFatZebraResponse(response));
 
+  } catch (error) {
+    console.error('Tokenization error:', error);
+    
+    // Proper error type handling for TypeScript strict mode
+    const errorMessage = extractErrorMessage(error);
+    
     if (error instanceof FatZebraError) {
       return NextResponse.json(
-        { error: error.message, details: error.errors },
+        { 
+          successful: false, 
+          error: error.message, 
+          details: error.errors 
+        },
         { status: 400 }
       );
     }
 
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        successful: false, 
+        error: errorMessage 
+      },
       { status: 500 }
     );
   }

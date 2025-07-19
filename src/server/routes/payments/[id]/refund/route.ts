@@ -37,7 +37,9 @@ export async function POST(
   } catch (error) {
     console.error('Refund error:', error);
     
-    // Proper error type handling
+    // Proper error type handling for TypeScript strict mode
+    const errorMessage = extractErrorMessage(error);
+    
     if (error instanceof FatZebraError) {
       return NextResponse.json(
         { 
@@ -49,7 +51,6 @@ export async function POST(
       );
     }
 
-    const errorMessage = extractErrorMessage(error);
     return NextResponse.json(
       { 
         successful: false, 

@@ -66,11 +66,6 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
 
   const isFormLoading = externalLoading || paymentLoading;
 
-  // Validate form on changes
-  useEffect(() => {
-    validateForm();
-  }, [formData]);
-
   const validateForm = useCallback(() => {
     const newErrors: PaymentFormErrors = {};
 
@@ -110,6 +105,11 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
 
     setErrors(newErrors);
   }, [formData, touched]);
+
+  // Validate form on changes
+  useEffect(() => {
+    validateForm();
+  }, [formData, validateForm]);
 
   const handleInputChange = useCallback((field: string, value: string) => {
     setFormData(prev => {
