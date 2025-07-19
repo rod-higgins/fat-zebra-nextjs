@@ -9,19 +9,19 @@ function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   const realIP = request.headers.get('x-real-ip');
   const cfConnectingIP = request.headers.get('cf-connecting-ip');
-  
+
   if (forwarded) {
     return forwarded.split(',')[0].trim();
   }
-  
+
   if (realIP) {
     return realIP;
   }
-  
+
   if (cfConnectingIP) {
     return cfConnectingIP;
   }
-  
+
   // Fallback to a default IP for development
   return '127.0.0.1';
 }
@@ -29,13 +29,13 @@ function getClientIP(request: NextRequest): string {
 export async function POST(request: NextRequest) {
   try {
     const body: PurchaseRequest = await request.json();
-    
+
     // Validate required fields
     if (!body.amount || !body.card_number || !body.card_expiry || !body.cvv || !body.card_holder) {
       return NextResponse.json(
-        { 
-          successful: false, 
-          errors: ['Missing required payment fields'] 
+        {
+          successful: false,
+          errors: ['Missing required payment fields'],
         },
         { status: 400 }
       );
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           successful: false,
-          errors: cardValidation.errors
+          errors: cardValidation.errors,
         },
         { status: 400 }
       );
@@ -85,19 +85,18 @@ export async function POST(request: NextRequest) {
 
     // Process the purchase
     const response = await client.purchase(purchaseData);
-    
-    return NextResponse.json(handleFatZebraResponse(response));
 
+    return NextResponse.json(handleFatZebraResponse(response));
   } catch (error) {
     console.error('Payment processing error:', error);
-    
+
     const errorMessage = extractErrorMessage(error);
     const statusCode = error instanceof FatZebraError ? 400 : 500;
 
     return NextResponse.json(
       {
         successful: false,
-        errors: [errorMessage]
+        errors: [errorMessage],
       },
       { status: statusCode }
     );

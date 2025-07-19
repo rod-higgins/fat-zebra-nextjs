@@ -1,6 +1,6 @@
 {
   "name": "@fwc/fat-zebra-nextjs",
-  "version": "0.3.2",
+  "version": "0.3.5",
   "description": "Fat Zebra payment gateway integration for Next.js applications with TypeScript support",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",

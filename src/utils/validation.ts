@@ -73,7 +73,7 @@ export function validateCard(cardNumber: string): CardValidationResult {
     return {
       valid: false,
       type: 'Unknown',
-      errors: ['Card number is required']
+      errors: ['Card number is required'],
     };
   }
 
@@ -114,7 +114,7 @@ export function validateCard(cardNumber: string): CardValidationResult {
   return {
     valid: errors.length === 0,
     type: cardType,
-    errors
+    errors,
   };
 }
 
@@ -135,19 +135,19 @@ export function formatCardNumber(value: string): string {
 // Format expiry date (MM/YY)
 export function formatExpiryDate(value: string): string {
   const digits = value.replace(/\D/g, '');
-  
+
   if (digits.length >= 2) {
     const month = digits.substring(0, 2);
     const year = digits.substring(2, 4);
-    
+
     // Validate month
     if (parseInt(month) > 12) {
       return '12/' + year;
     }
-    
+
     return month + (year ? '/' + year : '');
   }
-  
+
   return digits;
 }
 
@@ -159,7 +159,7 @@ export function formatCvv(value: string): string {
 // Validate expiry date
 export function validateExpiryDate(expiryDate: string): { valid: boolean; error?: string } {
   const match = expiryDate.match(/^(\d{2})\/(\d{2})$/);
-  
+
   if (!match) {
     return { valid: false, error: 'Expiry date must be in MM/YY format' };
   }
@@ -193,9 +193,9 @@ export function validateCvv(cvv: string, cardType?: string): { valid: boolean; e
   const expectedLength = cardType === 'American Express' ? 4 : 3;
 
   if (digits.length !== expectedLength) {
-    return { 
-      valid: false, 
-      error: `CVV must be ${expectedLength} digits for ${cardType || 'this card type'}` 
+    return {
+      valid: false,
+      error: `CVV must be ${expectedLength} digits for ${cardType || 'this card type'}`,
     };
   }
 
@@ -236,7 +236,7 @@ export function validatePhone(phone: string): { valid: boolean; error?: string }
 export function maskCardNumber(cardNumber: string): string {
   const digits = cardNumber.replace(/\D/g, '');
   if (digits.length < 4) return '****';
-  
+
   const masked = '*'.repeat(digits.length - 4) + digits.slice(-4);
   return formatCardNumber(masked);
 }
@@ -268,7 +268,7 @@ export function formatCurrency(amount: number, currency: string = 'AUD'): string
     style: 'currency',
     currency: currency,
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
@@ -301,8 +301,8 @@ export function isTestCardNumber(cardNumber: string): boolean {
     '4005554444444460', // Visa 3DS success
     '5123456789012346', // Mastercard success
     '5123456789012353', // Mastercard decline
-    '345678901234564',  // Amex success
-    '345678901234572'   // Amex decline
+    '345678901234564', // Amex success
+    '345678901234572', // Amex decline
   ];
 
   const digits = cardNumber.replace(/\D/g, '');
@@ -321,6 +321,6 @@ export function generateTestCustomer() {
     state: 'NSW',
     postcode: '2000',
     country: 'AU',
-    ip_address: '203.0.113.1'
+    ip_address: '203.0.113.1',
   };
 }

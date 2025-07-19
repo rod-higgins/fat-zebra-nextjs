@@ -203,13 +203,13 @@ export const TEST_CARDS = {
 export class FatZebraError extends Error {
   errors: string[];
   response?: any;
-  
+
   constructor(message: string, errors: string[] = [], response?: any) {
     super(message);
     this.name = 'FatZebraError';
     this.errors = errors;
     this.response = response;
-    
+
     // Maintains proper stack trace for where our error was thrown (only available on V8)
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, FatZebraError);
@@ -227,7 +227,12 @@ export function isErrorWithMessage(error: unknown): error is { message: string }
 }
 
 export function isErrorWithErrors(error: unknown): error is { errors: string[] } {
-  return typeof error === 'object' && error !== null && 'errors' in error && Array.isArray((error as any).errors);
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'errors' in error &&
+    Array.isArray((error as any).errors)
+  );
 }
 
 // Error Message Extraction Utility
@@ -235,15 +240,15 @@ export function extractErrorMessage(error: unknown): string {
   if (isFatZebraError(error)) {
     return error.errors.length > 0 ? error.errors[0] : error.message;
   }
-  
+
   if (isErrorWithMessage(error)) {
     return error.message;
   }
-  
+
   if (typeof error === 'string') {
     return error;
   }
-  
+
   return 'An unknown error occurred';
 }
 
@@ -252,19 +257,19 @@ export function extractErrorDetails(error: unknown): string[] {
   if (isFatZebraError(error)) {
     return error.errors.length > 0 ? error.errors : [error.message];
   }
-  
+
   if (isErrorWithErrors(error)) {
     return error.errors;
   }
-  
+
   if (isErrorWithMessage(error)) {
     return [error.message];
   }
-  
+
   if (typeof error === 'string') {
     return [error];
   }
-  
+
   return ['An unknown error occurred'];
 }
 

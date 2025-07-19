@@ -3,7 +3,6 @@ module.exports = {
   semi: true,
   trailingComma: 'es5',
   singleQuote: true,
-  doubleQuote: false,
   tabWidth: 2,
   useTabs: false,
   
@@ -14,7 +13,6 @@ module.exports = {
   // HTML/JSX specific
   htmlWhitespaceSensitivity: 'css',
   jsxSingleQuote: true,
-  jsxBracketSameLine: false,
   
   // Arrow functions
   arrowParens: 'avoid',

@@ -1,12 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { usePayment } from '../hooks/usePayment';
-import { 
-  formatCardNumber, 
-  formatExpiryDate, 
+import {
+  formatCardNumber,
+  formatExpiryDate,
   formatCvv,
   validateCard,
   validateEmail,
-  extractErrorMessage 
+  extractErrorMessage,
 } from '../utils';
 import type { PaymentFormProps, PaymentFormErrors, Customer } from '../types';
 
@@ -48,20 +48,24 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
   const [errors, setErrors] = useState<PaymentFormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
-  const { processPayment, loading: paymentLoading, error: paymentError } = usePayment({
-    onSuccess: (response) => {
+  const {
+    processPayment,
+    loading: paymentLoading,
+    error: paymentError,
+  } = usePayment({
+    onSuccess: response => {
       console.log('Payment successful:', response);
       if (enableTokenization && onTokenizationSuccess && response.authorization) {
         onTokenizationSuccess(response.authorization);
       }
     },
-    onError: (error) => {
+    onError: error => {
       console.error('Payment error:', error);
       setErrors(prev => ({
         ...prev,
-        general: extractErrorMessage(error)
+        general: extractErrorMessage(error),
       }));
-    }
+    },
   });
 
   const isFormLoading = externalLoading || paymentLoading;
@@ -79,9 +83,9 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
         card_holder: formData.card_holder,
         card_number: formData.card_number,
         card_expiry: formData.card_expiry,
-        cvv: formData.cvv
+        cvv: formData.cvv,
       });
-      
+
       if (!cardValidation.valid && cardValidation.errors.length > 0) {
         newErrors.card_number = cardValidation.errors[0];
       }
@@ -119,8 +123,8 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
           ...prev,
           customer: {
             ...prev.customer,
-            [customerField]: value
-          }
+            [customerField]: value,
+          },
         };
       }
 
@@ -136,60 +140,63 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
 
       return {
         ...prev,
-        [field]: formattedValue
+        [field]: formattedValue,
       };
     });
 
     // Mark field as touched
     setTouched(prev => ({
       ...prev,
-      [field]: true
+      [field]: true,
     }));
   }, []);
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
 
-    // Mark all fields as touched for validation
-    setTouched({
-      card_holder: true,
-      card_number: true,
-      card_expiry: true,
-      cvv: true,
-      customer_email: true,
-    });
-
-    // Clear previous errors
-    setErrors({});
-
-    try {
-      // Convert form customer data to API customer data (filtering out empty strings)
-      const customerData: Customer = {};
-      if (formData.customer.email.trim()) {
-        customerData.email = formData.customer.email.trim();
-      }
-      if (formData.customer.first_name.trim()) {
-        customerData.first_name = formData.customer.first_name.trim();
-      }
-      if (formData.customer.last_name.trim()) {
-        customerData.last_name = formData.customer.last_name.trim();
-      }
-
-      await processPayment({
-        amount,
-        currency,
-        card_holder: formData.card_holder,
-        card_number: formData.card_number.replace(/\s/g, ''),
-        card_expiry: formData.card_expiry,
-        cvv: formData.cvv,
-        ...(Object.keys(customerData).length > 0 && { customer: customerData }),
-        reference: `PAY-${Date.now()}`,
+      // Mark all fields as touched for validation
+      setTouched({
+        card_holder: true,
+        card_number: true,
+        card_expiry: true,
+        cvv: true,
+        customer_email: true,
       });
-    } catch (error) {
-      // Error is handled by the usePayment hook
-      console.error('Form submission error:', error);
-    }
-  }, [amount, currency, formData, processPayment]);
+
+      // Clear previous errors
+      setErrors({});
+
+      try {
+        // Convert form customer data to API customer data (filtering out empty strings)
+        const customerData: Customer = {};
+        if (formData.customer.email.trim()) {
+          customerData.email = formData.customer.email.trim();
+        }
+        if (formData.customer.first_name.trim()) {
+          customerData.first_name = formData.customer.first_name.trim();
+        }
+        if (formData.customer.last_name.trim()) {
+          customerData.last_name = formData.customer.last_name.trim();
+        }
+
+        await processPayment({
+          amount,
+          currency,
+          card_holder: formData.card_holder,
+          card_number: formData.card_number.replace(/\s/g, ''),
+          card_expiry: formData.card_expiry,
+          cvv: formData.cvv,
+          ...(Object.keys(customerData).length > 0 && { customer: customerData }),
+          reference: `PAY-${Date.now()}`,
+        });
+      } catch (error) {
+        // Error is handled by the usePayment hook
+        console.error('Form submission error:', error);
+      }
+    },
+    [amount, currency, formData, processPayment]
+  );
 
   return (
     <form onSubmit={handleSubmit} className={`fat-zebra-payment-form ${className}`}>
@@ -362,122 +369,122 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
       <h2>Payment Details</h2>
 
       {/* Amount display */}
-      <div className="amount-display">
-        <span className="amount">{amount.toFixed(2)}</span>
-        <span className="currency">{currency}</span>
+      <div className='amount-display'>
+        <span className='amount'>{amount.toFixed(2)}</span>
+        <span className='currency'>{currency}</span>
       </div>
 
       {/* Card details section */}
-      <div className="form-section">
+      <div className='form-section'>
         <h3>Card Information</h3>
-        
-        <div className="form-group">
-          <label htmlFor="card_holder">Cardholder Name</label>
+
+        <div className='form-group'>
+          <label htmlFor='card_holder'>Cardholder Name</label>
           <input
-            id="card_holder"
-            type="text"
+            id='card_holder'
+            type='text'
             value={formData.card_holder}
-            onChange={(e) => handleInputChange('card_holder', e.target.value)}
+            onChange={e => handleInputChange('card_holder', e.target.value)}
             disabled={isFormLoading}
             className={errors.card_holder ? 'error' : ''}
-            placeholder="John Smith"
-            autoComplete="cc-name"
+            placeholder='John Smith'
+            autoComplete='cc-name'
           />
-          {errors.card_holder && <span className="error-message">{errors.card_holder}</span>}
+          {errors.card_holder && <span className='error-message'>{errors.card_holder}</span>}
         </div>
 
-        <div className="form-group">
-          <label htmlFor="card_number">Card Number</label>
+        <div className='form-group'>
+          <label htmlFor='card_number'>Card Number</label>
           <input
-            id="card_number"
-            type="text"
+            id='card_number'
+            type='text'
             value={formData.card_number}
-            onChange={(e) => handleInputChange('card_number', e.target.value)}
+            onChange={e => handleInputChange('card_number', e.target.value)}
             disabled={isFormLoading}
             className={errors.card_number ? 'error' : ''}
-            placeholder="1234 5678 9012 3456"
-            autoComplete="cc-number"
+            placeholder='1234 5678 9012 3456'
+            autoComplete='cc-number'
             maxLength={19}
           />
-          {errors.card_number && <span className="error-message">{errors.card_number}</span>}
+          {errors.card_number && <span className='error-message'>{errors.card_number}</span>}
         </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="card_expiry">Expiry Date</label>
+        <div className='form-row'>
+          <div className='form-group'>
+            <label htmlFor='card_expiry'>Expiry Date</label>
             <input
-              id="card_expiry"
-              type="text"
+              id='card_expiry'
+              type='text'
               value={formData.card_expiry}
-              onChange={(e) => handleInputChange('card_expiry', e.target.value)}
+              onChange={e => handleInputChange('card_expiry', e.target.value)}
               disabled={isFormLoading}
               className={errors.card_expiry ? 'error' : ''}
-              placeholder="MM/YY"
-              autoComplete="cc-exp"
+              placeholder='MM/YY'
+              autoComplete='cc-exp'
               maxLength={5}
             />
-            {errors.card_expiry && <span className="error-message">{errors.card_expiry}</span>}
+            {errors.card_expiry && <span className='error-message'>{errors.card_expiry}</span>}
           </div>
 
-          <div className="form-group">
-            <label htmlFor="cvv">CVV</label>
+          <div className='form-group'>
+            <label htmlFor='cvv'>CVV</label>
             <input
-              id="cvv"
-              type="text"
+              id='cvv'
+              type='text'
               value={formData.cvv}
-              onChange={(e) => handleInputChange('cvv', e.target.value)}
+              onChange={e => handleInputChange('cvv', e.target.value)}
               disabled={isFormLoading}
               className={errors.cvv ? 'error' : ''}
-              placeholder="123"
-              autoComplete="cc-csc"
+              placeholder='123'
+              autoComplete='cc-csc'
               maxLength={4}
             />
-            {errors.cvv && <span className="error-message">{errors.cvv}</span>}
+            {errors.cvv && <span className='error-message'>{errors.cvv}</span>}
           </div>
         </div>
       </div>
 
       {/* Customer information */}
-      <div className="form-section">
+      <div className='form-section'>
         <h3>Customer Information</h3>
-        
-        <div className="form-group">
-          <label htmlFor="customer_email">Email</label>
+
+        <div className='form-group'>
+          <label htmlFor='customer_email'>Email</label>
           <input
-            id="customer_email"
-            type="email"
+            id='customer_email'
+            type='email'
             value={formData.customer.email}
-            onChange={(e) => handleInputChange('customer_email', e.target.value)}
+            onChange={e => handleInputChange('customer_email', e.target.value)}
             disabled={isFormLoading}
-            placeholder="john@example.com"
-            autoComplete="email"
+            placeholder='john@example.com'
+            autoComplete='email'
           />
         </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="customer_first_name">First Name</label>
+        <div className='form-row'>
+          <div className='form-group'>
+            <label htmlFor='customer_first_name'>First Name</label>
             <input
-              id="customer_first_name"
-              type="text"
+              id='customer_first_name'
+              type='text'
               value={formData.customer.first_name}
-              onChange={(e) => handleInputChange('customer_first_name', e.target.value)}
+              onChange={e => handleInputChange('customer_first_name', e.target.value)}
               disabled={isFormLoading}
-              placeholder="John"
-              autoComplete="given-name"
+              placeholder='John'
+              autoComplete='given-name'
             />
           </div>
 
-          <div className="form-group">
-            <label htmlFor="customer_last_name">Last Name</label>
+          <div className='form-group'>
+            <label htmlFor='customer_last_name'>Last Name</label>
             <input
-              id="customer_last_name"
-              type="text"
+              id='customer_last_name'
+              type='text'
               value={formData.customer.last_name}
-              onChange={(e) => handleInputChange('customer_last_name', e.target.value)}
+              onChange={e => handleInputChange('customer_last_name', e.target.value)}
               disabled={isFormLoading}
-              placeholder="Smith"
-              autoComplete="family-name"
+              placeholder='Smith'
+              autoComplete='family-name'
             />
           </div>
         </div>
@@ -485,20 +492,18 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
 
       {/* General error */}
       {(errors.general || paymentError) && (
-        <div className="error-message general-error">
-          {errors.general || paymentError}
-        </div>
+        <div className='error-message general-error'>{errors.general || paymentError}</div>
       )}
 
       {/* Submit button */}
       <button
-        type="submit"
+        type='submit'
         disabled={isFormLoading}
         className={`submit-button ${isFormLoading ? 'loading' : ''}`}
       >
         {isFormLoading ? (
           <>
-            <span className="spinner"></span>
+            <span className='spinner'></span>
             Processing...
           </>
         ) : (
@@ -508,10 +513,8 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
 
       {/* Tokenization info */}
       {enableTokenization && (
-        <div className="tokenization-info">
-          <small>
-            Your card details will be securely tokenized for future payments.
-          </small>
+        <div className='tokenization-info'>
+          <small>Your card details will be securely tokenized for future payments.</small>
         </div>
       )}
     </form>

@@ -15,15 +15,15 @@ export {
   handleGenerateHash,
   handleHealthCheck,
   runtime,
-  dynamic
+  dynamic,
 } from './routes';
 
 // Re-export client for server-side use
-export { 
-  createFatZebraClient, 
-  FatZebraClient, 
-  FatZebraError, 
-  handleFatZebraResponse 
+export {
+  createFatZebraClient,
+  FatZebraClient,
+  FatZebraError,
+  handleFatZebraResponse,
 } from '../lib/client';
 
 // Re-export specific types needed for server-side operations
@@ -41,7 +41,7 @@ export type {
   WebhookEvent,
   OAuthConfig,
   Customer,
-  CardDetails
+  CardDetails,
 } from '../types';
 
 // Re-export specific utilities needed for server-side operations
@@ -53,16 +53,11 @@ export {
   generateReference,
   isTestCard,
   delay,
-  retryWithBackoff
+  retryWithBackoff,
 } from '../utils';
 
 // Re-export error handling utilities (choose one source to avoid conflicts)
-export {
-  extractErrorMessage,
-  extractErrorDetails
-} from '../utils'; // Use utils version since it's more comprehensive
+export { extractErrorMessage, extractErrorDetails } from '../utils'; // Use utils version since it's more comprehensive
 
 // Re-export hash generation utility (choose one source to avoid conflicts)
-export {
-  generateVerificationHash
-} from '../utils'; // Use utils version since it's the canonical implementation
+export { generateVerificationHash } from '../utils'; // Use utils version since it's the canonical implementation

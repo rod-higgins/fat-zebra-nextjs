@@ -6,12 +6,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createFatZebraClient, FatZebraError, handleFatZebraResponse } from '../lib/client';
 import { generateVerificationHash, extractErrorMessage } from '../utils';
-import type { 
-  PurchaseRequest, 
-  AuthorizationRequest, 
-  RefundRequest, 
+import type {
+  PurchaseRequest,
+  AuthorizationRequest,
+  RefundRequest,
   TokenizationRequest,
-  VerificationHashData 
+  VerificationHashData,
 } from '../types';
 
 // Helper function to get client IP from request
@@ -19,19 +19,19 @@ function getClientIP(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
   const realIP = request.headers.get('x-real-ip');
   const cfConnectingIP = request.headers.get('cf-connecting-ip');
-  
+
   if (forwarded) {
     return forwarded.split(',')[0].trim();
   }
-  
+
   if (realIP) {
     return realIP;
   }
-  
+
   if (cfConnectingIP) {
     return cfConnectingIP;
   }
-  
+
   return '127.0.0.1';
 }
 
@@ -41,12 +41,12 @@ function getClientIP(request: NextRequest): string {
 export async function handlePurchase(request: NextRequest): Promise<NextResponse> {
   try {
     const body: PurchaseRequest = await request.json();
-    
+
     if (!body.amount || !body.card_number || !body.card_expiry || !body.cvv || !body.card_holder) {
       return NextResponse.json(
-        { 
-          successful: false, 
-          errors: ['Missing required payment fields'] 
+        {
+          successful: false,
+          errors: ['Missing required payment fields'],
         },
         { status: 400 }
       );
@@ -74,7 +74,6 @@ export async function handlePurchase(request: NextRequest): Promise<NextResponse
 
     const response = await client.purchase(purchaseData);
     return NextResponse.json(handleFatZebraResponse(response));
-
   } catch (error) {
     console.error('Purchase error:', error);
     const errorMessage = extractErrorMessage(error);
@@ -83,7 +82,7 @@ export async function handlePurchase(request: NextRequest): Promise<NextResponse
     return NextResponse.json(
       {
         successful: false,
-        errors: [errorMessage]
+        errors: [errorMessage],
       },
       { status: statusCode }
     );
@@ -96,7 +95,7 @@ export async function handlePurchase(request: NextRequest): Promise<NextResponse
 export async function handleAuthorization(request: NextRequest): Promise<NextResponse> {
   try {
     const body: AuthorizationRequest = await request.json();
-    
+
     const customerIp = getClientIP(request);
     const client = createFatZebraClient({
       username: process.env.FAT_ZEBRA_USERNAME!,
@@ -108,12 +107,11 @@ export async function handleAuthorization(request: NextRequest): Promise<NextRes
       ...body,
       amount: Math.round(body.amount * 100),
       customer_ip: customerIp,
-      capture: false
+      capture: false,
     };
 
     const response = await client.authorize(authData);
     return NextResponse.json(handleFatZebraResponse(response));
-
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
     return NextResponse.json(
@@ -129,7 +127,7 @@ export async function handleAuthorization(request: NextRequest): Promise<NextRes
 export async function handleCapture(request: NextRequest): Promise<NextResponse> {
   try {
     const { transactionId, amount } = await request.json();
-    
+
     if (!transactionId) {
       return NextResponse.json(
         { successful: false, errors: ['Transaction ID is required'] },
@@ -145,7 +143,6 @@ export async function handleCapture(request: NextRequest): Promise<NextResponse>
 
     const response = await client.capture(transactionId, amount);
     return NextResponse.json(handleFatZebraResponse(response));
-
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
     return NextResponse.json(
@@ -161,7 +158,7 @@ export async function handleCapture(request: NextRequest): Promise<NextResponse>
 export async function handleRefund(request: NextRequest): Promise<NextResponse> {
   try {
     const body: RefundRequest = await request.json();
-    
+
     if (!body.transaction_id) {
       return NextResponse.json(
         { successful: false, errors: ['Transaction ID is required'] },
@@ -177,7 +174,6 @@ export async function handleRefund(request: NextRequest): Promise<NextResponse> 
 
     const response = await client.refund(body);
     return NextResponse.json(handleFatZebraResponse(response));
-
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
     return NextResponse.json(
@@ -193,7 +189,7 @@ export async function handleRefund(request: NextRequest): Promise<NextResponse> 
 export async function handleTokenization(request: NextRequest): Promise<NextResponse> {
   try {
     const body: TokenizationRequest = await request.json();
-    
+
     if (!body.card_number || !body.card_expiry || !body.card_holder) {
       return NextResponse.json(
         { successful: false, errors: ['Missing required card fields'] },
@@ -209,7 +205,6 @@ export async function handleTokenization(request: NextRequest): Promise<NextResp
 
     const response = await client.tokenize(body);
     return NextResponse.json(handleFatZebraResponse(response));
-
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
     return NextResponse.json(
@@ -225,7 +220,7 @@ export async function handleTokenization(request: NextRequest): Promise<NextResp
 export async function handleVoid(request: NextRequest): Promise<NextResponse> {
   try {
     const { transactionId } = await request.json();
-    
+
     if (!transactionId) {
       return NextResponse.json(
         { successful: false, errors: ['Transaction ID is required'] },
@@ -241,7 +236,6 @@ export async function handleVoid(request: NextRequest): Promise<NextResponse> {
 
     const response = await client.void(transactionId);
     return NextResponse.json(handleFatZebraResponse(response));
-
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
     return NextResponse.json(
@@ -258,7 +252,7 @@ export async function handleTransactionStatus(request: NextRequest): Promise<Nex
   try {
     const url = new URL(request.url);
     const transactionId = url.searchParams.get('id');
-    
+
     if (!transactionId) {
       return NextResponse.json(
         { successful: false, errors: ['Transaction ID is required'] },
@@ -274,7 +268,6 @@ export async function handleTransactionStatus(request: NextRequest): Promise<Nex
 
     const response = await client.getTransaction(transactionId);
     return NextResponse.json(handleFatZebraResponse(response));
-
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
     return NextResponse.json(
@@ -292,7 +285,7 @@ export async function handleVerifyWebhook(request: NextRequest): Promise<NextRes
     // Note: body parsing removed as it's not currently used in the basic implementation
     // In a full implementation, the body would be used for signature verification
     const signature = request.headers.get('x-webhook-signature');
-    
+
     if (!signature) {
       return NextResponse.json(
         { successful: false, errors: ['Missing webhook signature'] },
@@ -304,15 +297,11 @@ export async function handleVerifyWebhook(request: NextRequest): Promise<NextRes
     // For now, return success
     return NextResponse.json({
       successful: true,
-      verified: true
+      verified: true,
     });
-
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
-    return NextResponse.json(
-      { successful: false, errors: [errorMessage] },
-      { status: 500 }
-    );
+    return NextResponse.json({ successful: false, errors: [errorMessage] }, { status: 500 });
   }
 }
 
@@ -322,7 +311,7 @@ export async function handleVerifyWebhook(request: NextRequest): Promise<NextRes
 export async function handleGenerateHash(request: NextRequest): Promise<NextResponse> {
   try {
     const body: VerificationHashData = await request.json();
-    
+
     if (!body.amount || !body.currency || !body.reference || !body.timestamp) {
       return NextResponse.json(
         { successful: false, errors: ['Missing required hash data'] },
@@ -335,15 +324,11 @@ export async function handleGenerateHash(request: NextRequest): Promise<NextResp
 
     return NextResponse.json({
       successful: true,
-      hash
+      hash,
     });
-
   } catch (error) {
     const errorMessage = extractErrorMessage(error);
-    return NextResponse.json(
-      { successful: false, errors: [errorMessage] },
-      { status: 500 }
-    );
+    return NextResponse.json({ successful: false, errors: [errorMessage] }, { status: 500 });
   }
 }
 
@@ -355,7 +340,7 @@ export async function handleHealthCheck(): Promise<NextResponse> {
     successful: true,
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '0.3.2',
+    version: '0.3.5',
   });
 }
 

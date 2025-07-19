@@ -1,15 +1,10 @@
-const nextJest = require('next/jest');
-
-const createJestConfig = nextJest({
-  // Provide the path to your Next.js app to load next.config.js and .env files
-  dir: './',
-});
-
-// Add any custom config to be passed to Jest
-const customJestConfig = {
+module.exports = {
   displayName: '@fwc/fat-zebra-nextjs',
+  preset: 'ts-jest',
+  testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
-  testEnvironment: 'jest-environment-jsdom',
+  
+  // Module path mapping
   moduleNameMapping: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@/components/(.*)$': '<rootDir>/src/components/$1',
@@ -19,17 +14,22 @@ const customJestConfig = {
     '^@/types/(.*)$': '<rootDir>/src/types/$1',
     '^@/server/(.*)$': '<rootDir>/src/server/$1',
   },
+  
+  // Test file patterns
   testMatch: [
     '<rootDir>/tests/**/*.test.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/__tests__/**/*.{js,jsx,ts,tsx}',
     '<rootDir>/src/**/*.{test,spec}.{js,jsx,ts,tsx}'
   ],
+  
+  // Ignore patterns
   testPathIgnorePatterns: [
-    '<rootDir>/.next/',
     '<rootDir>/node_modules/',
     '<rootDir>/dist/',
     '<rootDir>/backup/'
   ],
+  
+  // Coverage configuration
   collectCoverageFrom: [
     'src/**/*.{js,jsx,ts,tsx}',
     '!src/**/*.d.ts',
@@ -38,6 +38,7 @@ const customJestConfig = {
     '!src/**/*.stories.{js,jsx,ts,tsx}',
     '!src/**/*.config.{js,jsx,ts,tsx}',
   ],
+  
   coverageThreshold: {
     global: {
       branches: 80,
@@ -46,34 +47,61 @@ const customJestConfig = {
       statements: 80,
     },
   },
+  
   coverageReporters: [
     'text',
     'lcov',
     'html',
     'json-summary'
   ],
+  
   coverageDirectory: 'coverage',
+  
+  // Transform configuration
   transform: {
-    '^.+\\.(js|jsx|ts|tsx)$': ['babel-jest', { presets: ['next/babel'] }],
+    '^.+\\.(ts|tsx)$': ['ts-jest', {
+      tsconfig: {
+        jsx: 'react-jsx'
+      }
+    }],
+    '^.+\\.(js|jsx)$': 'babel-jest',
   },
+  
+  // Transform ignore patterns
   transformIgnorePatterns: [
     '/node_modules/(?!(@fat-zebra/sdk)/)',
   ],
+  
+  // Module file extensions
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  
+  // Jest configuration
   verbose: true,
   clearMocks: true,
   resetMocks: true,
   restoreMocks: true,
   testTimeout: 10000,
   maxWorkers: '50%',
-  // Environment variables for testing
-  setupFiles: ['<rootDir>/tests/env.setup.js'],
+  
+  // Environment setup
+  setupFiles: ['<rootDir>/tests/env.setup.ts'],
+  
+  // TypeScript configuration
   globals: {
     'ts-jest': {
-      useESM: true,
+      useESM: false,
+      tsconfig: {
+        jsx: 'react-jsx'
+      }
     },
   },
+  
+  // Module directories
+  moduleDirectories: ['node_modules', '<rootDir>/src'],
+  
+  // Extensions to resolve
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
+  
+  // ESM support
+  extensionsToTreatAsEsm: ['.ts', '.tsx'],
 };
-
-// createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
-module.exports = createJestConfig(customJestConfig);

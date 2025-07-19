@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../../../../../lib/client';
+import {
+  createFatZebraClient,
+  handleFatZebraResponse,
+  FatZebraError,
+} from '../../../../../lib/client';
 import { extractErrorMessage } from '../../../../../utils';
 import type { RefundRequest } from '../../../../../types';
 
@@ -10,7 +14,7 @@ export async function POST(
   try {
     const transactionId = params.id;
     const body = await request.json();
-    
+
     if (!transactionId) {
       return NextResponse.json(
         { successful: false, errors: ['Transaction ID is required'] },
@@ -33,28 +37,27 @@ export async function POST(
 
     const response = await client.refund(refundData);
     return NextResponse.json(handleFatZebraResponse(response));
-
   } catch (error) {
     console.error('Refund error:', error);
-    
+
     // Proper error type handling for TypeScript strict mode
     const errorMessage = extractErrorMessage(error);
-    
+
     if (error instanceof FatZebraError) {
       return NextResponse.json(
-        { 
-          successful: false, 
-          error: error.message, 
-          details: error.errors 
+        {
+          successful: false,
+          error: error.message,
+          details: error.errors,
         },
         { status: 400 }
       );
     }
 
     return NextResponse.json(
-      { 
-        successful: false, 
-        error: errorMessage 
+      {
+        successful: false,
+        error: errorMessage,
       },
       { status: 500 }
     );

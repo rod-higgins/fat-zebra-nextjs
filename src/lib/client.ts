@@ -11,7 +11,7 @@ import type {
   TokenizationRequest,
   FatZebraResponse,
   TransactionResponse,
-  TokenizationResponse
+  TokenizationResponse,
 } from '../types';
 
 import { FatZebraError } from '../types';
@@ -25,7 +25,11 @@ export class FatZebraClient {
       username: config.username,
       token: config.token,
       sandbox: config.sandbox ?? true,
-      gatewayUrl: config.gatewayUrl ?? (config.sandbox ? 'https://gateway.sandbox.fatzebra.com.au' : 'https://gateway.fatzebra.com.au'),
+      gatewayUrl:
+        config.gatewayUrl ??
+        (config.sandbox
+          ? 'https://gateway.sandbox.fatzebra.com.au'
+          : 'https://gateway.fatzebra.com.au'),
       timeout: config.timeout ?? 30000,
     };
 
@@ -52,9 +56,16 @@ export class FatZebraClient {
   /**
    * Capture a previously authorized transaction
    */
-  async capture(transactionId: string, amount?: number): Promise<FatZebraResponse<TransactionResponse>> {
+  async capture(
+    transactionId: string,
+    amount?: number
+  ): Promise<FatZebraResponse<TransactionResponse>> {
     const data = amount ? { amount: Math.round(amount * 100) } : {};
-    return this.makeRequest<TransactionResponse>('POST', `/purchases/${transactionId}/capture`, data);
+    return this.makeRequest<TransactionResponse>(
+      'POST',
+      `/purchases/${transactionId}/capture`,
+      data
+    );
   }
 
   /**
@@ -97,10 +108,10 @@ export class FatZebraClient {
     data?: any
   ): Promise<FatZebraResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Basic ${Buffer.from(`${this.config.username}:${this.config.token}`).toString('base64')}`,
+      Authorization: `Basic ${Buffer.from(`${this.config.username}:${this.config.token}`).toString('base64')}`,
       'User-Agent': 'FatZebra Next.js v0.2.2',
     };
 
@@ -132,7 +143,6 @@ export class FatZebraClient {
         errors: responseData.errors,
         test: responseData.test,
       };
-
     } catch (error) {
       if (error instanceof FatZebraError) {
         throw error;
@@ -142,11 +152,8 @@ export class FatZebraClient {
         if (error.name === 'AbortError') {
           throw new FatZebraError('Request timeout', ['Request timed out']);
         }
-        
-        throw new FatZebraError(
-          `Network error: ${error.message}`,
-          [error.message]
-        );
+
+        throw new FatZebraError(`Network error: ${error.message}`, [error.message]);
       }
 
       throw new FatZebraError('Unknown error occurred', ['Unknown error']);
@@ -166,11 +173,7 @@ export function createFatZebraClient(config: FatZebraConfig): FatZebraClient {
  */
 export function handleFatZebraResponse<T>(response: FatZebraResponse<T>): FatZebraResponse<T> {
   if (!response.successful && response.errors?.length) {
-    throw new FatZebraError(
-      response.errors[0],
-      response.errors,
-      response
-    );
+    throw new FatZebraError(response.errors[0], response.errors, response);
   }
 
   return response;
