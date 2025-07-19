@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PaymentFormProps, CardDetails, Customer, PaymentFormErrors } from '../types';
+import {
+  PaymentFormProps,
+  PaymentFormData,
+  CardDetails,
+  Customer,
+  PaymentFormErrors
+} from '../types';
 import { validateCard, formatCardNumber, formatExpiryDate, getCardType } from '../utils';
 
 export const PaymentForm: React.FC<PaymentFormProps> = ({
@@ -18,24 +24,28 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
   showAmountField = false,
   requireCustomer = false
 }) => {
-  // Form state
-  const [formData, setFormData] = useState({
-    card_holder: '',
-    card_number: '',
-    card_expiry: '',
-    cvv: '',
+  // Form state - properly structured to match PaymentFormData
+  const [formData, setFormData] = useState<PaymentFormData>({
     amount: amount || 0,
     currency,
     reference: '',
-    first_name: '',
-    last_name: '',
-    email: '',
-    phone: '',
-    address: '',
-    city: '',
-    state: '',
-    postcode: '',
-    country: 'AU'
+    cardDetails: {
+      card_holder: '',
+      card_number: '',
+      card_expiry: '',
+      cvv: ''
+    },
+    customer: requireCustomer ? {
+      first_name: '',
+      last_name: '',
+      email: '',
+      phone: '',
+      address: '',
+      city: '',
+      state: '',
+      postcode: '',
+      country: 'AU'
+    } : undefined
   });
 
   const [errors, setErrors] = useState<PaymentFormErrors>({});
@@ -44,6 +54,13 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
 
   // 3DS2 integration ref
   const fatZebraRef = useRef<any>(null);
+
+  // Update amount when prop changes
+  useEffect(() => {
+    if (amount !== undefined) {
+      setFormData(prev => ({ ...prev, amount }));
+    }
+  }, [amount]);
 
   // Load Fat Zebra SDK for 3DS2 if enabled
   useEffect(() => {
@@ -81,21 +98,21 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
     const newErrors: PaymentFormErrors = {};
 
     // Card holder validation
-    if (!formData.card_holder.trim()) {
+    if (!formData.cardDetails.card_holder.trim()) {
       newErrors.card_holder = 'Card holder name is required';
     }
 
     // Card number validation
-    const cardValidation = validateCard(formData.card_number);
+    const cardValidation = validateCard(formData.cardDetails.card_number);
     if (!cardValidation.isValid) {
       newErrors.card_number = cardValidation.errors[0] || 'Invalid card number';
     }
 
     // Expiry validation
-    if (!formData.card_expiry || !/^\d{2}\/\d{2}$/.test(formData.card_expiry)) {
+    if (!formData.cardDetails.card_expiry || !/^\d{2}\/\d{2}$/.test(formData.cardDetails.card_expiry)) {
       newErrors.card_expiry = 'Please enter expiry as MM/YY';
     } else {
-      const [month, year] = formData.card_expiry.split('/');
+      const [month, year] = formData.cardDetails.card_expiry.split('/');
       const currentDate = new Date();
       const expiryDate = new Date(2000 + parseInt(year), parseInt(month) - 1);
       
@@ -105,7 +122,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
     }
 
     // CVV validation
-    if (!formData.cvv || !/^\d{3,4}$/.test(formData.cvv)) {
+    if (!formData.cardDetails.cvv || !/^\d{3,4}$/.test(formData.cardDetails.cvv)) {
       newErrors.cvv = 'Please enter a valid CVV';
     }
 
@@ -115,14 +132,14 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
     }
 
     // Customer validation (if required)
-    if (requireCustomer) {
-      if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email)) {
+    if (requireCustomer && formData.customer) {
+      if (!formData.customer.email || !/\S+@\S+\.\S+/.test(formData.customer.email)) {
         newErrors.email = 'Please enter a valid email address';
       }
-      if (!formData.first_name.trim()) {
+      if (!formData.customer.first_name?.trim()) {
         newErrors.first_name = 'First name is required';
       }
-      if (!formData.last_name.trim()) {
+      if (!formData.customer.last_name?.trim()) {
         newErrors.last_name = 'Last name is required';
       }
     }
@@ -135,33 +152,53 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
     const { name, value } = e.target;
     let formattedValue = value;
 
-    // Format card number
-    if (name === 'card_number') {
-      formattedValue = formatCardNumber(value);
-      const type = getCardType(value);
-      setCardType(type);
-    }
-
-    // Format expiry date
-    if (name === 'card_expiry') {
-      formattedValue = formatExpiryDate(value);
-    }
-
-    // Limit CVV length
-    if (name === 'cvv' && value.length > 4) {
-      return;
-    }
-
-    setFormData(prev => ({
-      ...prev,
-      [name]: formattedValue
-    }));
-
-    // Clear error for this field
+    // Clear any existing errors for this field
     if (errors[name as keyof PaymentFormErrors]) {
-      setErrors(prev => ({
+      setErrors(prev => ({ ...prev, [name]: undefined }));
+    }
+
+    // Handle card details fields
+    if (['card_holder', 'card_number', 'card_expiry', 'cvv'].includes(name)) {
+      // Format card number
+      if (name === 'card_number') {
+        formattedValue = formatCardNumber(value);
+        const type = getCardType(value);
+        setCardType(type);
+      }
+
+      // Format expiry date
+      if (name === 'card_expiry') {
+        formattedValue = formatExpiryDate(value);
+      }
+
+      // Limit CVV length
+      if (name === 'cvv') {
+        formattedValue = value.replace(/\D/g, '').substring(0, 4);
+      }
+
+      setFormData(prev => ({
         ...prev,
-        [name]: undefined
+        cardDetails: {
+          ...prev.cardDetails,
+          [name]: formattedValue
+        }
+      }));
+    }
+    // Handle customer fields
+    else if (requireCustomer && formData.customer && ['first_name', 'last_name', 'email', 'phone', 'address', 'city', 'state', 'postcode', 'country'].includes(name)) {
+      setFormData(prev => ({
+        ...prev,
+        customer: {
+          ...prev.customer!,
+          [name]: formattedValue
+        }
+      }));
+    }
+    // Handle top-level fields
+    else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: name === 'amount' ? parseFloat(formattedValue) || 0 : formattedValue
       }));
     }
   };
@@ -169,82 +206,26 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (loading || isSubmitting) return;
-    
-    if (!validateForm()) return;
+    if (isSubmitting || loading) return;
+
+    if (!validateForm()) {
+      return;
+    }
+
+    // Generate reference if not provided
+    if (!formData.reference) {
+      setFormData(prev => ({
+        ...prev,
+        reference: `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      }));
+    }
 
     setIsSubmitting(true);
 
     try {
-      // Generate reference if not provided
-      const reference = formData.reference || `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-      const cardDetails: CardDetails = {
-        card_holder: formData.card_holder,
-        card_number: formData.card_number.replace(/\s/g, ''),
-        card_expiry: formData.card_expiry,
-        cvv: formData.cvv
-      };
-
-      const customer: Customer = requireCustomer ? {
-        first_name: formData.first_name,
-        last_name: formData.last_name,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
-        city: formData.city,
-        state: formData.state,
-        postcode: formData.postcode,
-        country: formData.country
-      } : undefined;
-
-      const paymentData = {
-        amount: formData.amount,
-        currency: formData.currency,
-        reference,
-        cardDetails,
-        customer
-      };
-
-      // Handle 3DS2 if enabled
-      if (enable3DS && fatZebraRef.current) {
-        // Process with 3DS2
-        const result = await fatZebraRef.current.verify({
-          card: cardDetails,
-          amount: formData.amount,
-          currency: formData.currency,
-          reference
-        });
-
-        if (result.successful) {
-          await onSubmit(paymentData);
-        } else {
-          throw new Error(result.errors?.[0] || '3DS verification failed');
-        }
-      } else {
-        // Standard payment processing
-        await onSubmit(paymentData);
-      }
-
-      // Handle tokenization if enabled
-      if (enableTokenization && onTokenizationSuccess) {
-        try {
-          const tokenResponse = await fetch('/api/tokenize', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cardDetails })
-          });
-
-          if (tokenResponse.ok) {
-            const { token } = await tokenResponse.json();
-            onTokenizationSuccess(token);
-          }
-        } catch (tokenError) {
-          console.warn('Tokenization failed:', tokenError);
-        }
-      }
-
+      await onSubmit(formData);
     } catch (error) {
+      console.error('Payment submission error:', error);
       setErrors({
         general: error instanceof Error ? error.message : 'Payment failed. Please try again.'
       });
@@ -300,7 +281,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
             type="text"
             id="card_holder"
             name="card_holder"
-            value={formData.card_holder}
+            value={formData.cardDetails.card_holder}
             onChange={handleInputChange}
             className={inputClasses}
             disabled={loading || isSubmitting}
@@ -319,7 +300,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
             type="text"
             id="card_number"
             name="card_number"
-            value={formData.card_number}
+            value={formData.cardDetails.card_number}
             onChange={handleInputChange}
             className={inputClasses}
             disabled={loading || isSubmitting}
@@ -339,7 +320,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
               type="text"
               id="card_expiry"
               name="card_expiry"
-              value={formData.card_expiry}
+              value={formData.cardDetails.card_expiry}
               onChange={handleInputChange}
               className={inputClasses}
               disabled={loading || isSubmitting}
@@ -357,7 +338,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
               type="text"
               id="cvv"
               name="cvv"
-              value={formData.cvv}
+              value={formData.cardDetails.cvv}
               onChange={handleInputChange}
               className={inputClasses}
               disabled={loading || isSubmitting}
@@ -370,7 +351,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
       </div>
 
       {/* Customer Details (if required) */}
-      {requireCustomer && (
+      {requireCustomer && formData.customer && (
         <div className="space-y-4">
           <h3 className="text-lg font-medium text-gray-900">Customer Details</h3>
           
@@ -383,7 +364,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
                 type="text"
                 id="first_name"
                 name="first_name"
-                value={formData.first_name}
+                value={formData.customer.first_name || ''}
                 onChange={handleInputChange}
                 className={inputClasses}
                 disabled={loading || isSubmitting}
@@ -399,7 +380,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
                 type="text"
                 id="last_name"
                 name="last_name"
-                value={formData.last_name}
+                value={formData.customer.last_name || ''}
                 onChange={handleInputChange}
                 className={inputClasses}
                 disabled={loading || isSubmitting}
@@ -416,7 +397,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
               type="email"
               id="email"
               name="email"
-              value={formData.email}
+              value={formData.customer.email || ''}
               onChange={handleInputChange}
               className={inputClasses}
               disabled={loading || isSubmitting}

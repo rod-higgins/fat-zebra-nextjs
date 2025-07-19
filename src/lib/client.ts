@@ -52,7 +52,7 @@ export class FatZebraClient {
     return {
       'Authorization': `Basic ${credentials}`,
       'Content-Type': 'application/json',
-      'User-Agent': '@fwc/fat-zebra-nextjs/0.2.0'
+      'User-Agent': '@fwc/fat-zebra-nextjs/0.2.1' 
     };
   }
 
@@ -90,7 +90,9 @@ export class FatZebraClient {
         throw error;
       }
       throw new FatZebraError(
-        error instanceof Error ? error.message : 'Unknown error occurred'
+        error instanceof Error ? error.message : 'Unknown error occurred',
+        [error instanceof Error ? error.message : 'Unknown error'],
+        'NETWORK_ERROR'
       );
     }
   }
