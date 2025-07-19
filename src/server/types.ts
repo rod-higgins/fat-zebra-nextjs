@@ -19,15 +19,19 @@ export interface StandaloneResponse {
   json(data: any): StandaloneResponse;
 }
 
-// Next.js types (optional - only imported when Next.js is available)
+// Next.js types (conditional - only available when Next.js is present)
 export type NextRequest = any;
 export type NextResponse = any;
 
 // Helper to check if Next.js is available
 export function isNextJSAvailable(): boolean {
   try {
-    require('next/server');
-    return true;
+    // Use dynamic require to avoid TypeScript resolution issues
+    if (typeof require !== 'undefined') {
+      require('next/server');
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -37,10 +41,14 @@ export function isNextJSAvailable(): boolean {
 export function createResponse(data: any, status: number = 200): any {
   if (isNextJSAvailable()) {
     try {
-      const { NextResponse } = require('next/server');
-      return NextResponse.json(data, { status });
-    } catch {
-      // Fallback if NextResponse isn't available
+      // Use dynamic require to avoid TypeScript resolution issues
+      if (typeof require !== 'undefined') {
+        const { NextResponse } = require('next/server');
+        return NextResponse.json(data, { status });
+      }
+    } catch (error) {
+      // Fallback if NextResponse import fails
+      console.debug('NextResponse import failed, using fallback');
     }
   }
   
@@ -77,10 +85,37 @@ export async function extractRequestData(request: any): Promise<{
       body = null;
     }
 
+    const headers: Record<string, string> = {};
+    
+    // Handle different header formats
+    if (request.headers) {
+      if (typeof request.headers.entries === 'function') {
+        // Headers object with entries method
+        for (const [key, value] of request.headers.entries()) {
+          headers[key] = value;
+        }
+      } else if (typeof request.headers.get === 'function') {
+        // Headers object with get method
+        const commonHeaders = [
+          'authorization', 'content-type', 'user-agent', 'accept',
+          'x-forwarded-for', 'x-real-ip', 'cf-connecting-ip'
+        ];
+        for (const header of commonHeaders) {
+          const value = request.headers.get(header);
+          if (value) {
+            headers[header] = value;
+          }
+        }
+      } else {
+        // Plain object
+        Object.assign(headers, request.headers);
+      }
+    }
+
     return {
       method: request.method || 'GET',
       body,
-      headers: Object.fromEntries(request.headers?.entries?.() || []),
+      headers,
       url: request.url || ''
     };
   }
@@ -98,10 +133,17 @@ export async function extractRequestData(request: any): Promise<{
 export function getClientIP(request: any): string {
   const headers = request.headers || {};
   
-  // Try different header formats
-  const forwarded = headers.get?.('x-forwarded-for') || headers['x-forwarded-for'];
-  const realIP = headers.get?.('x-real-ip') || headers['x-real-ip'];
-  const cfConnectingIP = headers.get?.('cf-connecting-ip') || headers['cf-connecting-ip'];
+  // Function to get header value regardless of header format
+  const getHeader = (name: string): string | undefined => {
+    if (typeof headers.get === 'function') {
+      return headers.get(name);
+    }
+    return headers[name];
+  };
+  
+  const forwarded = getHeader('x-forwarded-for');
+  const realIP = getHeader('x-real-ip');
+  const cfConnectingIP = getHeader('cf-connecting-ip');
 
   if (forwarded) {
     return Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0].trim();
@@ -118,64 +160,53 @@ export function getClientIP(request: any): string {
   return 'unknown';
 }
 
-// Configuration interface for server handlers
+// Extended server configuration types
 export interface ServerConfig {
-  fatZebra: {
-    username: string;
-    token: string;
-    sandbox?: boolean;
-    sharedSecret?: string;
-    timeout?: number;
-  };
-  webhook?: {
-    verifySignature?: boolean;
-    allowedIPs?: string[];
-    enableLogging?: boolean;
-  };
-  cors?: {
-    origins?: string[];
+  enableCors?: boolean;
+  corsOptions?: {
+    origin?: string | string[] | boolean;
     methods?: string[];
-    headers?: string[];
+    allowedHeaders?: string[];
+    credentials?: boolean;
   };
+  rateLimit?: RateLimitConfig;
+  logging?: LoggerConfig;
+  cache?: CacheConfig;
 }
 
-// Enhanced request interface with additional metadata
 export interface EnhancedRequest extends StandaloneRequest {
-  clientIP?: string;
+  ip?: string;
   userAgent?: string;
   timestamp?: Date;
   requestId?: string;
 }
 
-// Enhanced response interface with metadata
 export interface EnhancedResponse extends StandaloneResponse {
   requestId?: string;
   processingTime?: number;
-  metadata?: Record<string, any>;
+  cached?: boolean;
 }
 
-// Error handling types
-export interface ServerError {
-  code: string;
-  message: string;
+export interface ServerError extends Error {
+  statusCode?: number;
+  code?: string;
   details?: any;
-  stack?: string;
 }
 
 export interface ErrorResponse {
   successful: false;
-  errors: string[];
+  error: string;
   code?: string;
+  details?: any;
   requestId?: string;
   timestamp?: string;
 }
 
-// Rate limiting types
 export interface RateLimitConfig {
-  windowMs: number;
-  maxRequests: number;
-  skipSuccessfulRequests?: boolean;
-  skipFailedRequests?: boolean;
+  windowMs?: number;
+  maxRequests?: number;
+  skipSuccessful?: boolean;
+  skipFailed?: boolean;
 }
 
 export interface RateLimitInfo {
@@ -185,22 +216,20 @@ export interface RateLimitInfo {
   retryAfter?: number;
 }
 
-// Middleware types
 export type MiddlewareFunction = (
   request: EnhancedRequest,
   response: EnhancedResponse,
-  next: () => Promise<void>
-) => Promise<void>;
+  next: () => void
+) => void | Promise<void>;
 
 export interface MiddlewareConfig {
   cors?: boolean;
-  rateLimit?: RateLimitConfig;
+  rateLimit?: boolean;
   logging?: boolean;
   authentication?: boolean;
-  validation?: boolean;
 }
 
-// OAuth specific types for server-side operations
+// OAuth related types
 export interface OAuthTokenRequest {
   grant_type: 'client_credentials';
   client_id: string;
@@ -215,73 +244,62 @@ export interface OAuthTokenResponse {
   scope?: string;
 }
 
-// Webhook specific types
+// Webhook types
 export interface WebhookPayload {
-  id: string;
-  type: string;
+  event: string;
   data: any;
   timestamp: string;
-  version: string;
+  signature?: string;
 }
 
 export interface WebhookVerificationResult {
-  verified: boolean;
-  payload: WebhookPayload | null;
+  valid: boolean;
+  event?: any;
   error?: string;
 }
 
-// Health check types
+// Health check response
 export interface HealthCheckResponse {
   status: 'ok' | 'error';
   timestamp: string;
-  version: string;
-  mode: 'standalone' | 'nextjs';
-  services?: {
-    fatZebra: 'connected' | 'disconnected' | 'unknown';
-    database?: 'connected' | 'disconnected' | 'unknown';
-    cache?: 'connected' | 'disconnected' | 'unknown';
-  };
+  version?: string;
+  mode: 'nextjs' | 'standalone';
   uptime?: number;
-  memory?: {
-    used: number;
-    total: number;
-    percentage: number;
+  dependencies?: {
+    [key: string]: 'ok' | 'error';
   };
 }
 
-// Cache types for standalone operation
+// Caching types
 export interface CacheConfig {
-  ttl: number; // Time to live in milliseconds
-  maxSize: number; // Maximum number of items
-  checkPeriod?: number; // How often to check for expired items
+  enabled?: boolean;
+  ttl?: number;
+  maxSize?: number;
 }
 
 export interface CacheItem<T = any> {
-  value: T;
-  expires: number;
-  created: number;
+  data: T;
+  timestamp: number;
+  ttl: number;
 }
 
 // Logging types
 export interface LogEntry {
-  timestamp: string;
-  level: 'info' | 'warn' | 'error' | 'debug';
+  level: 'debug' | 'info' | 'warn' | 'error';
   message: string;
+  timestamp: Date;
   requestId?: string;
-  clientIP?: string;
-  method?: string;
-  url?: string;
-  statusCode?: number;
-  processingTime?: number;
-  error?: any;
-  metadata?: Record<string, any>;
+  userId?: string;
+  ip?: string;
+  userAgent?: string;
+  metadata?: any;
 }
 
 export interface LoggerConfig {
-  level: 'info' | 'warn' | 'error' | 'debug';
-  format: 'json' | 'text';
-  destination: 'console' | 'file' | 'both';
+  level?: 'debug' | 'info' | 'warn' | 'error';
+  format?: 'json' | 'text';
+  destination?: 'console' | 'file' | 'remote';
   filename?: string;
-  maxFileSize?: number;
+  maxSize?: number;
   maxFiles?: number;
 }

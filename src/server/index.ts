@@ -49,24 +49,6 @@ export type {
   StandaloneRequest,
   StandaloneResponse,
   RequestHandler,
-  ServerConfig,
-  EnhancedRequest,
-  EnhancedResponse,
-  ServerError,
-  ErrorResponse,
-  RateLimitConfig,
-  RateLimitInfo,
-  MiddlewareFunction,
-  MiddlewareConfig,
-  OAuthTokenRequest,
-  OAuthTokenResponse,
-  WebhookPayload,
-  WebhookVerificationResult,
-  HealthCheckResponse,
-  CacheConfig,
-  CacheItem,
-  LogEntry,
-  LoggerConfig,
 } from './types';
 
 export {
@@ -92,25 +74,6 @@ export {
   dynamic,
 } from './routes-standalone';
 
-// Conditional Next.js exports (only available when Next.js is present)
-let nextjsRoutes: any = {};
-
-try {
-  // Only import Next.js specific routes if Next.js is available
-  if (typeof require !== 'undefined') {
-    try {
-      require('next/server');
-      // Next.js is available, we can safely import Next.js specific routes
-      nextjsRoutes = require('./routes-nextjs');
-    } catch (error) {
-      // Next.js not available, use standalone versions
-      console.debug('Next.js not available, using standalone server routes');
-    }
-  }
-} catch {
-  // Fallback to standalone
-}
-
 // Import standalone handlers as fallbacks
 import {
   handlePurchase as handlePurchaseStandalone,
@@ -124,6 +87,38 @@ import {
   handleGenerateHash as handleGenerateHashStandalone,
   handleHealthCheck as handleHealthCheckStandalone,
 } from './routes-standalone';
+
+// Function to check if Next.js is available
+function checkNextJSAvailability(): boolean {
+  try {
+    // Use dynamic require to avoid TypeScript resolution issues
+    if (typeof require !== 'undefined') {
+      require('next/server');
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+// Dynamic loading of Next.js specific routes
+let nextjsRoutes: any = {};
+
+// Only try to load Next.js routes if Next.js is available
+if (checkNextJSAvailability()) {
+  try {
+    // Use dynamic import to avoid TypeScript compilation issues
+    if (typeof require !== 'undefined') {
+      nextjsRoutes = require('./routes-nextjs');
+    }
+  } catch (error) {
+    console.debug('Failed to load Next.js routes, using standalone versions:', error);
+    nextjsRoutes = {};
+  }
+} else {
+  console.debug('Next.js not available, using standalone server routes');
+}
 
 // Export Next.js specific handlers if available, otherwise use standalone
 export const handlePurchaseNextJS = nextjsRoutes.handlePurchase || handlePurchaseStandalone;
@@ -142,7 +137,7 @@ export const handleEnhancedWebhookNextJS = nextjsRoutes.handleEnhancedWebhook ||
 
 // Utility function to get appropriate handlers based on environment
 export function getRouteHandlers() {
-  const isNextJS = isNextJSAvailable();
+  const isNextJS = checkNextJSAvailability();
   
   return {
     isNextJS,
@@ -162,7 +157,7 @@ export function getRouteHandlers() {
 }
 
 // Helper function for creating Express.js compatible middleware
-export function createExpressHandler(handler: RequestHandler) {
+export function createExpressHandler(handler: any) {
   return async (req: any, res: any) => {
     try {
       // Convert Express request to our standard format
@@ -205,7 +200,7 @@ export function createExpressHandler(handler: RequestHandler) {
 }
 
 // Helper function for creating standard HTTP server handlers
-export function createHttpHandler(handler: RequestHandler) {
+export function createHttpHandler(handler: any) {
   return async (req: any, res: any) => {
     try {
       let body = '';
@@ -235,26 +230,22 @@ export function createHttpHandler(handler: RequestHandler) {
             }
             if (response.headers) {
               Object.entries(response.headers).forEach(([key, value]) => {
-                res.setHeader(key, value);
+                res.setHeader(key, value as string);
               });
             }
-            if (response.body) {
-              res.end(response.body);
-            } else {
-              res.setHeader('Content-Type', 'application/json');
-              res.end(JSON.stringify(response));
-            }
+            res.setHeader('Content-Type', 'application/json');
+            res.end(response.body || JSON.stringify(response));
           } else {
             res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(response));
           }
-        } catch (error) {
-          console.error('Request processing error:', error);
-          res.statusCode = 500;
+        } catch (parseError) {
+          console.error('Request parsing error:', parseError);
+          res.statusCode = 400;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({
             successful: false,
-            errors: [extractErrorMessage(error)]
+            errors: ['Invalid request format']
           }));
         }
       });
@@ -270,177 +261,195 @@ export function createHttpHandler(handler: RequestHandler) {
   };
 }
 
-// Helper function for creating Fastify handlers
-export function createFastifyHandler(handler: RequestHandler) {
-  return async (request: any, reply: any) => {
-    try {
-      // Convert Fastify request to our standard format
-      const standardRequest = {
-        method: request.method,
-        headers: request.headers,
-        body: JSON.stringify(request.body),
-        url: request.url,
-        json: () => Promise.resolve(request.body)
-      };
-
-      const response = await handler(standardRequest);
-      
-      // Convert our response to Fastify format
-      if (response && typeof response === 'object') {
-        if (response.status) {
-          reply.code(response.status);
-        }
-        if (response.headers) {
-          Object.entries(response.headers).forEach(([key, value]) => {
-            reply.header(key, value);
-          });
-        }
-        return response.body ? response.body : response;
-      } else {
-        return response;
-      }
-    } catch (error) {
-      console.error('Handler error:', error);
-      reply.code(500);
-      return {
+// OAuth token generation handler that works in both environments
+export async function generateAccessToken(request: any): Promise<any> {
+  try {
+    const method = request.method || 'POST';
+    if (method !== 'POST') {
+      const response = {
         successful: false,
-        errors: [extractErrorMessage(error)]
+        errors: ['Method not allowed']
       };
-    }
-  };
-}
-
-// Helper function for creating Koa handlers
-export function createKoaHandler(handler: RequestHandler) {
-  return async (ctx: any) => {
-    try {
-      // Convert Koa context to our standard format
-      const request = {
-        method: ctx.method,
-        headers: ctx.headers,
-        body: JSON.stringify(ctx.request.body),
-        url: ctx.url,
-        json: () => Promise.resolve(ctx.request.body)
-      };
-
-      const response = await handler(request);
       
-      // Convert our response to Koa format
-      if (response && typeof response === 'object') {
-        if (response.status) {
-          ctx.status = response.status;
+      if (checkNextJSAvailability()) {
+        if (typeof require !== 'undefined') {
+          const { NextResponse } = require('next/server');
+          return NextResponse.json(response, { status: 405 });
         }
-        if (response.headers) {
-          Object.entries(response.headers).forEach(([key, value]) => {
-            ctx.set(key, value);
-          });
-        }
-        ctx.body = response.body ? response.body : response;
-      } else {
-        ctx.body = response;
       }
-    } catch (error) {
-      console.error('Handler error:', error);
-      ctx.status = 500;
-      ctx.body = {
-        successful: false,
-        errors: [extractErrorMessage(error)]
-      };
-    }
-  };
-}
-
-// Helper function to create AWS Lambda handlers
-export function createLambdaHandler(handler: RequestHandler) {
-  return async (event: any, context: any) => {
-    try {
-      // Convert Lambda event to our standard format
-      const request = {
-        method: event.httpMethod || event.requestContext?.http?.method,
-        headers: event.headers || {},
-        body: event.body,
-        url: event.path || event.rawPath,
-        json: () => Promise.resolve(event.body ? JSON.parse(event.body) : null)
-      };
-
-      const response = await handler(request);
       
-      // Convert our response to Lambda format
       return {
-        statusCode: response.status || 200,
-        headers: response.headers || {},
-        body: response.body || JSON.stringify(response)
-      };
-    } catch (error) {
-      console.error('Handler error:', error);
-      return {
-        statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          successful: false,
-          errors: [extractErrorMessage(error)]
-        })
+        status: 405,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(response)
       };
     }
-  };
-}
 
-// Convenience export for common server frameworks
-export const frameworks = {
-  express: createExpressHandler,
-  fastify: createFastifyHandler,
-  koa: createKoaHandler,
-  http: createHttpHandler,
-  lambda: createLambdaHandler,
-  nextjs: getRouteHandlers
-};
+    const body = await request.json();
+    const { clientId, clientSecret, scope } = body;
 
-// Environment detection utility
-export function detectEnvironment(): string {
-  if (typeof window !== 'undefined') {
-    return 'browser';
-  }
-  
-  if (isNextJSAvailable()) {
-    return 'nextjs';
-  }
-  
-  if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    return 'lambda';
-  }
-  
-  if (process.env.VERCEL) {
-    return 'vercel';
-  }
-  
-  if (process.env.NETLIFY) {
-    return 'netlify';
-  }
-  
-  return 'nodejs';
-}
-
-// Configuration helper
-export function createServerConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
-  return {
-    fatZebra: {
-      username: process.env.FATZEBRA_USERNAME || '',
-      token: process.env.FATZEBRA_TOKEN || '',
-      sandbox: process.env.NODE_ENV !== 'production',
-      sharedSecret: process.env.FATZEBRA_SHARED_SECRET,
-      timeout: 30000,
-      ...overrides.fatZebra
-    },
-    webhook: {
-      verifySignature: true,
-      enableLogging: process.env.NODE_ENV !== 'production',
-      ...overrides.webhook
-    },
-    cors: {
-      origins: ['http://localhost:3000'],
-      methods: ['GET', 'POST'],
-      headers: ['Content-Type', 'Authorization'],
-      ...overrides.cors
+    if (!clientId || !clientSecret) {
+      const response = {
+        successful: false,
+        errors: ['Missing client credentials']
+      };
+      
+      if (checkNextJSAvailability()) {
+        if (typeof require !== 'undefined') {
+          const { NextResponse } = require('next/server');
+          return NextResponse.json(response, { status: 400 });
+        }
+      }
+      
+      return {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(response)
+      };
     }
-  };
+
+    // Generate OAuth token logic here
+    const token = {
+      access_token: `fz_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      token_type: 'Bearer',
+      expires_in: 3600,
+      scope: scope || 'payments'
+    };
+
+    if (checkNextJSAvailability()) {
+      if (typeof require !== 'undefined') {
+        const { NextResponse } = require('next/server');
+        return NextResponse.json({
+          successful: true,
+          ...token
+        });
+      }
+    }
+
+    return {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        successful: true,
+        ...token
+      })
+    };
+  } catch (error) {
+    console.error('OAuth token generation error:', error);
+
+    const response = {
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    };
+
+    if (checkNextJSAvailability()) {
+      if (typeof require !== 'undefined') {
+        const { NextResponse } = require('next/server');
+        return NextResponse.json(response, { status: 500 });
+      }
+    }
+
+    return {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(response)
+    };
+  }
+}
+
+// Enhanced verification hash generation
+export async function generateVerificationHashRoute(request: any): Promise<any> {
+  try {
+    const method = request.method || 'POST';
+    if (method !== 'POST') {
+      const response = {
+        successful: false,
+        errors: ['Method not allowed']
+      };
+      
+      if (checkNextJSAvailability()) {
+        if (typeof require !== 'undefined') {
+          const { NextResponse } = require('next/server');
+          return NextResponse.json(response, { status: 405 });
+        }
+      }
+      
+      return {
+        status: 405,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(response)
+      };
+    }
+
+    const body = await request.json();
+    const { reference, amount, currency } = body;
+
+    if (!reference || amount === undefined || !currency) {
+      const response = {
+        successful: false,
+        errors: ['Missing required fields: reference, amount, currency']
+      };
+      
+      if (checkNextJSAvailability()) {
+        if (typeof require !== 'undefined') {
+          const { NextResponse } = require('next/server');
+          return NextResponse.json(response, { status: 400 });
+        }
+      }
+      
+      return {
+        status: 400,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(response)
+      };
+    }
+
+    const hash = generateVerificationHash({
+      reference,
+      amount,
+      currency,
+      sharedSecret: process.env.FAT_ZEBRA_SHARED_SECRET || '',
+    });
+
+    const responseData = {
+      successful: true,
+      hash,
+      reference,
+      amount,
+      currency
+    };
+
+    if (checkNextJSAvailability()) {
+      if (typeof require !== 'undefined') {
+        const { NextResponse } = require('next/server');
+        return NextResponse.json(responseData);
+      }
+    }
+
+    return {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(responseData)
+    };
+  } catch (error) {
+    console.error('Hash generation error:', error);
+
+    const response = {
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    };
+
+    if (checkNextJSAvailability()) {
+      if (typeof require !== 'undefined') {
+        const { NextResponse } = require('next/server');
+        return NextResponse.json(response, { status: 500 });
+      }
+    }
+
+    return {
+      status: 500,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(response)
+    };
+  }
 }

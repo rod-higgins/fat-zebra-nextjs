@@ -59,7 +59,11 @@
     "useDefineForClassFields": true,
     
     // Allow optional imports that might not exist
-    "moduleDetection": "auto"
+    "moduleDetection": "auto",
+    
+    // Include Node.js types
+    "typeRoots": ["./node_modules/@types", "./src/types"],
+    "types": ["node", "jest"]
   },
   "include": [
     "src/**/*"
@@ -76,13 +80,7 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/*.spec.ts",
-    "**/*.spec.tsx",
-    // Conditionally exclude Next.js specific files if Next.js is not available
-    "src/server/routes-nextjs.ts",
-    "src/server/routes/payments/route.ts",
-    "src/server/routes/payments/[id]/refund/route.ts",
-    "src/server/routes/payments/tokenize/route.ts",
-    "src/server/routes/index.ts"
+    "**/*.spec.tsx"
   ],
   "ts-node": {
     "compilerOptions": {

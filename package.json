@@ -1,137 +1,64 @@
 {
   "name": "@fwc/fat-zebra-nextjs",
-  "version": "0.3.8",
-  "description": "Fat Zebra payment gateway integration for Next.js applications with TypeScript support",
+  "version": "0.3.9",
+  "description": "Fat Zebra payment processing library for Next.js and standalone environments",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
       "import": "./dist/index.esm.js",
-      "require": "./dist/index.js"
-    },
-    "./components": {
-      "types": "./dist/components/index.d.ts",
-      "import": "./dist/components/index.esm.js",
-      "require": "./dist/components/index.js"
-    },
-    "./hooks": {
-      "types": "./dist/hooks/index.d.ts",
-      "import": "./dist/hooks/index.esm.js",
-      "require": "./dist/hooks/index.js"
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     },
     "./server": {
-      "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.esm.js",
-      "require": "./dist/server/index.js"
+      "require": "./dist/server/index.js",
+      "types": "./dist/server/index.d.ts"
     },
-    "./utils": {
-      "types": "./dist/utils/index.d.ts",
-      "import": "./dist/utils/index.esm.js",
-      "require": "./dist/utils/index.js"
+    "./components": {
+      "import": "./dist/components/index.esm.js",
+      "require": "./dist/components/index.js",
+      "types": "./dist/components/index.d.ts"
     }
   },
   "files": [
     "dist",
     "README.md",
-    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "npm run clean && npm run build:rollup && npm run build:types",
-    "build:rollup": "rollup -c",
-    "build:types": "tsc --project tsconfig.build.json --declaration --emitDeclarationOnly --outDir dist",
+    "build": "npm run build:clean && npm run build:types && npm run build:js",
+    "build:clean": "rimraf dist",
+    "build:types": "tsc --emitDeclarationOnly",
+    "build:js": "rollup -c",
+    "build:nextjs": "tsc --project tsconfig.nextjs.json",
     "dev": "rollup -c -w",
-    "test": "jest --config jest.config.js --passWithNoTests",
-    "test:watch": "jest --watch --config jest.config.js --passWithNoTests",
+    "test": "jest --config jest.config.js",
+    "test:watch": "jest --watch --config jest.config.js",
     "test:coverage": "jest --coverage --config jest.config.js --passWithNoTests",
-    "test:standalone": "cross-env FATZEBRA_STANDALONE=true jest --config jest.config.js --passWithNoTests",
-    "test:standalone:coverage": "cross-env FATZEBRA_STANDALONE=true jest --coverage --config jest.config.js --passWithNoTests",
-    "lint": "eslint src/**/*.{ts,tsx}",
-    "lint:fix": "eslint src/**/*.{ts,tsx} --fix",
-    "typecheck": "npm run typecheck:standalone",
-    "typecheck:standalone": "tsc --noEmit --project tsconfig.json",
-    "typecheck:nextjs": "tsc --noEmit --project tsconfig.nextjs.json",
-    "typecheck:test": "tsc --noEmit --project tsconfig.test.json", 
-    "typecheck:dev": "tsc --noEmit --project tsconfig.dev.json",
-    "typecheck:all": "npm run typecheck:standalone && npm run typecheck:test && npm run typecheck:dev",
-    "docs": "typedoc",
-    "clean": "rimraf dist",
-    "prepublishOnly": "npm run clean && npm run build && npm run test:standalone",
-    "release": "semantic-release",
-    "prepare": "husky install",
-    "validate": "npm run typecheck && npm run lint && npm run test:standalone",
-    "validate:nextjs": "npm run typecheck:nextjs && npm run lint && npm run test",
-    "validate:all": "npm run typecheck:all && npm run lint && npm run test:standalone",
-    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
-    "checkformat": "prettier --check \"src/**/*.{ts,tsx}\"",
-    "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand --config jest.config.js"
-  },
-  "devDependencies": {
-    "@babel/core": "^7.22.0",
-    "@babel/preset-env": "^7.22.0",
-    "@babel/preset-react": "^7.22.0",
-    "@babel/preset-typescript": "^7.22.0",
-    "@babel/plugin-proposal-class-properties": "^7.18.0",
-    "@babel/plugin-proposal-object-rest-spread": "^7.20.0",
-    "@rollup/plugin-commonjs": "^25.0.0",
-    "@rollup/plugin-node-resolve": "^15.0.0",
-    "@rollup/plugin-typescript": "^11.0.0",
-    "@testing-library/jest-dom": "^6.0.0",
-    "@testing-library/react": "^14.0.0",
-    "@testing-library/user-event": "^14.0.0",
-    "@types/jest": "^29.5.0",
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "babel-jest": "^29.5.0",
-    "cross-env": "^7.0.3",
-    "eslint": "^8.42.0",
-    "eslint-config-prettier": "^8.8.0",
-    "eslint-plugin-jsx-a11y": "^6.7.0",
-    "eslint-plugin-prettier": "^4.2.0",
-    "eslint-plugin-react": "^7.32.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "husky": "^8.0.0",
-    "jest": "^29.5.0",
-    "jest-environment-jsdom": "^29.5.0",
-    "prettier": "^2.8.0",
-    "rimraf": "^5.0.0",
-    "rollup": "^3.25.0",
-    "rollup-plugin-dts": "^5.3.0",
-    "ts-jest": "^29.1.0",
-    "typescript": "^5.1.0"
-  },
-  "peerDependencies": {
-    "react": ">=16.8.0",
-    "react-dom": ">=16.8.0",
-    "@fat-zebra/sdk": "^1.5.9"
-  },
-  "dependencies": {
-    "@fat-zebra/sdk": "^1.5.9"
+    "lint": "eslint src --ext .ts,.tsx",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "type-check": "tsc --noEmit",
+    "type-check:nextjs": "tsc --noEmit --project tsconfig.nextjs.json",
+    "validate": "npm run lint && npm run type-check && npm run test",
+    "docs": "typedoc src/index.ts",
+    "prepublishOnly": "npm run validate && npm run build"
   },
   "keywords": [
     "fat-zebra",
     "payment",
-    "gateway",
     "nextjs",
     "react",
     "typescript",
-    "stripe",
     "payments",
     "credit-card",
-    "ecommerce",
-    "checkout",
-    "tokenization",
     "3ds",
-    "3d-secure",
     "oauth",
-    "standalone",
-    "library"
+    "tokenization"
   ],
+  "author": "Your Organization",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/your-org/fat-zebra-nextjs.git"
@@ -140,10 +67,46 @@
     "url": "https://github.com/your-org/fat-zebra-nextjs/issues"
   },
   "homepage": "https://github.com/your-org/fat-zebra-nextjs#readme",
-  "license": "MIT",
-  "author": "Your Name <your.email@example.com>",
+  "peerDependencies": {
+    "react": ">=17.0.0",
+    "react-dom": ">=17.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@fat-zebra/sdk": "^1.5.9"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^24.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "@testing-library/jest-dom": "^5.16.0",
+    "@testing-library/react": "^14.0.0",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^18.19.120",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.57.0",
+    "@typescript-eslint/parser": "^5.57.0",
+    "eslint": "^8.37.0",
+    "eslint-plugin-react": "^7.32.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "jest": "^29.5.0",
+    "jest-environment-jsdom": "^29.5.0",
+    "next": "^14.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "rimraf": "^4.4.0",
+    "rollup": "^3.20.0",
+    "rollup-plugin-peer-deps-external": "^2.2.4",
+    "ts-jest": "^29.1.0",
+    "typedoc": "^0.24.0",
+    "typescript": "^5.0.0"
+  },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=16.0.0"
   }
 }

@@ -1,218 +1,107 @@
-const resolve = require('@rollup/plugin-node-resolve');
-const commonjs = require('@rollup/plugin-commonjs');
-const typescript = require('@rollup/plugin-typescript');
-const dts = require('rollup-plugin-dts');
-const pkg = require('./package.json');
+import resolve from '@rollup/plugin-node-resolve';
+import commonjs from '@rollup/plugin-commonjs';
+import typescript from '@rollup/plugin-typescript';
+import peerDepsExternal from 'rollup-plugin-peer-deps-external';
 
-const external = [
-  ...Object.keys(pkg.peerDependencies || {}),
-  ...Object.keys(pkg.dependencies || {}),
-  'react/jsx-runtime',
-  'crypto',
-  'next/server'
-];
-
-// Common plugins configuration
-const getPlugins = (tsConfigPath = './tsconfig.build.json') => [
-  resolve({
-    preferBuiltins: true,
-    browser: false
-  }),
-  commonjs({
-    include: ['node_modules/**']
-  }),
-  typescript({
-    tsconfig: tsConfigPath,
-    declaration: false,
-    declarationMap: false,
-    sourceMap: true,
-    exclude: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx']
-  })
-];
-
-module.exports = [
-  // Main library build - ES Module
-  {
-    input: 'src/index.ts',
-    output: {
-      file: pkg.module,
-      format: 'esm',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-  
-  // Main library build - CommonJS
-  {
-    input: 'src/index.ts',
-    output: {
-      file: pkg.main,
-      format: 'cjs',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Components sub-module - ES Module
-  {
-    input: 'src/components/index.ts',
-    output: {
-      file: 'dist/components/index.esm.js',
-      format: 'esm',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Components sub-module - CommonJS
-  {
-    input: 'src/components/index.ts',
-    output: {
-      file: 'dist/components/index.js',
-      format: 'cjs',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Hooks sub-module - ES Module
-  {
-    input: 'src/hooks/index.ts',
-    output: {
-      file: 'dist/hooks/index.esm.js',
-      format: 'esm',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Hooks sub-module - CommonJS
-  {
-    input: 'src/hooks/index.ts',
-    output: {
-      file: 'dist/hooks/index.js',
-      format: 'cjs',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Server sub-module - ES Module
-  {
-    input: 'src/server/index.ts',
-    output: {
-      file: 'dist/server/index.esm.js',
-      format: 'esm',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Server sub-module - CommonJS
-  {
-    input: 'src/server/index.ts',
-    output: {
-      file: 'dist/server/index.js',
-      format: 'cjs',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Utils sub-module - ES Module
-  {
-    input: 'src/utils/index.ts',
-    output: {
-      file: 'dist/utils/index.esm.js',
-      format: 'esm',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Utils sub-module - CommonJS
-  {
-    input: 'src/utils/index.ts',
-    output: {
-      file: 'dist/utils/index.js',
-      format: 'cjs',
-      sourcemap: true,
-      exports: 'named'
-    },
-    external,
-    plugins: getPlugins()
-  },
-
-  // Type definitions for main module
-  {
-    input: 'src/index.ts',
-    output: {
-      file: pkg.types,
-      format: 'esm'
-    },
-    plugins: [dts.default()],
-    external: [...external, /\.css$/]
-  },
-
-  // Type definitions for components
-  {
-    input: 'src/components/index.ts',
-    output: {
-      file: 'dist/components/index.d.ts',
-      format: 'esm'
-    },
-    plugins: [dts.default()],
-    external: [...external, /\.css$/]
-  },
-
-  // Type definitions for hooks
-  {
-    input: 'src/hooks/index.ts',
-    output: {
-      file: 'dist/hooks/index.d.ts',
-      format: 'esm'
-    },
-    plugins: [dts.default()],
-    external: [...external, /\.css$/]
-  },
-
-  // Type definitions for server
-  {
-    input: 'src/server/index.ts',
-    output: {
-      file: 'dist/server/index.d.ts',
-      format: 'esm'
-    },
-    plugins: [dts.default()],
-    external: [...external, /\.css$/]
-  },
-
-  // Type definitions for utils
-  {
-    input: 'src/utils/index.ts',
-    output: {
-      file: 'dist/utils/index.d.ts',
-      format: 'esm'
-    },
-    plugins: [dts.default()],
-    external: [...external, /\.css$/]
+const createConfig = (input, output, declaration = false) => ({
+  input,
+  output,
+  external: [
+    'react',
+    'react-dom',
+    'next/server',
+    '@fat-zebra/sdk'
+  ],
+  plugins: [
+    peerDepsExternal(),
+    resolve({
+      browser: true,
+      preferBuiltins: false
+    }),
+    commonjs({
+      include: 'node_modules/**',
+      requireReturnsDefault: 'auto'
+    }),
+    typescript({
+      tsconfig: './tsconfig.json',
+      declaration,
+      declarationMap: declaration,
+      exclude: [
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/*.spec.ts',
+        '**/*.spec.tsx',
+        'tests/**/*',
+        'examples/**/*'
+      ],
+      compilerOptions: {
+        declaration,
+        declarationMap: declaration,
+        outDir: output.dir || 'dist'
+      }
+    })
+  ],
+  onwarn: (warning, warn) => {
+    // Suppress warnings about external modules
+    if (warning.code === 'UNRESOLVED_IMPORT' && warning.source === 'next/server') {
+      return;
+    }
+    warn(warning);
   }
+});
+
+export default [
+  // Main library build
+  createConfig(
+    'src/index.ts',
+    [
+      {
+        file: 'dist/index.js',
+        format: 'cjs',
+        sourcemap: true
+      },
+      {
+        file: 'dist/index.esm.js',
+        format: 'esm',
+        sourcemap: true
+      }
+    ],
+    true
+  ),
+  
+  // Server module build
+  createConfig(
+    'src/server/index.ts',
+    [
+      {
+        file: 'dist/server/index.js',
+        format: 'cjs',
+        sourcemap: true
+      },
+      {
+        file: 'dist/server/index.esm.js',
+        format: 'esm',
+        sourcemap: true
+      }
+    ],
+    true
+  ),
+  
+  // Components module build
+  createConfig(
+    'src/components/index.ts',
+    [
+      {
+        file: 'dist/components/index.js',
+        format: 'cjs',
+        sourcemap: true
+      },
+      {
+        file: 'dist/components/index.esm.js',
+        format: 'esm',
+        sourcemap: true
+      }
+    ],
+    true
+  )
 ];

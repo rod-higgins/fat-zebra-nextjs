@@ -1,9 +1,34 @@
 /**
  * Next.js specific route handlers
  * These handlers use Next.js specific features like NextRequest and NextResponse
+ * This file should only be imported when Next.js is available
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+// Conditional imports - only import when Next.js is available
+let NextRequest: any;
+let NextResponse: any;
+
+try {
+  if (typeof require !== 'undefined') {
+    const nextServer = require('next/server');
+    NextRequest = nextServer.NextRequest;
+    NextResponse = nextServer.NextResponse;
+  } else {
+    throw new Error('require not available');
+  }
+} catch (error) {
+  // Next.js not available - create placeholder types
+  NextRequest = class MockNextRequest {};
+  NextResponse = {
+    json: (data: any, init?: any) => ({
+      status: init?.status || 200,
+      json: () => Promise.resolve(data),
+      headers: new Map(),
+      body: JSON.stringify(data)
+    })
+  };
+}
+
 import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../lib/client';
 import { generateVerificationHash, extractErrorMessage, extractErrorDetails } from '../utils';
 import type { 
@@ -22,16 +47,33 @@ export const dynamic = 'force-dynamic';
  * Helper function to create Next.js JSON response
  */
 function createNextResponse(data: any, status: number = 200) {
-  return NextResponse.json(data, { status });
+  if (NextResponse && NextResponse.json) {
+    return NextResponse.json(data, { status });
+  }
+  // Fallback for non-Next.js environments
+  return {
+    status,
+    json: () => Promise.resolve(data),
+    headers: new Map(),
+    body: JSON.stringify(data)
+  };
 }
 
 /**
  * Helper function to get client IP from Next.js request
  */
-function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  const realIP = request.headers.get('x-real-ip');
-  const cfConnectingIP = request.headers.get('cf-connecting-ip');
+function getClientIP(request: any): string {
+  const headers = request.headers || new Map();
+  const getHeader = (name: string) => {
+    if (typeof headers.get === 'function') {
+      return headers.get(name);
+    }
+    return headers[name];
+  };
+
+  const forwarded = getHeader('x-forwarded-for');
+  const realIP = getHeader('x-real-ip');
+  const cfConnectingIP = getHeader('cf-connecting-ip');
 
   if (forwarded) {
     return forwarded.split(',')[0].trim();
@@ -51,7 +93,7 @@ function getClientIP(request: NextRequest): string {
 /**
  * Health check endpoint for Next.js
  */
-export async function handleHealthCheck(request: NextRequest): Promise<NextResponse> {
+export async function handleHealthCheck(request: any): Promise<any> {
   try {
     if (request.method !== 'GET') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
@@ -60,7 +102,7 @@ export async function handleHealthCheck(request: NextRequest): Promise<NextRespo
     return createNextResponse({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version || '0.3.8',
+      version: process.env.npm_package_version || '0.3.9',
       mode: 'nextjs',
       edge: runtime === 'edge'
     });
@@ -75,406 +117,513 @@ export async function handleHealthCheck(request: NextRequest): Promise<NextRespo
 /**
  * Process a purchase transaction with Next.js
  */
-export async function handlePurchase(request: NextRequest): Promise<NextResponse> {
+export async function handlePurchase(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
-    const body = await request.json();
-    const { purchaseData, config } = body;
+    const body: PurchaseRequest = await request.json();
 
-    if (!purchaseData || !config) {
-      return createNextResponse({
-        successful: false,
-        errors: ['purchaseData and config are required']
-      }, 400);
+    if (!body.amount || !body.currency) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing required fields: amount, currency'] },
+        400
+      );
     }
 
-    const client = createFatZebraClient(config);
-    const result = await client.purchase(purchaseData as PurchaseRequest);
-    
-    return createNextResponse(result);
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+    });
+
+    const response = await client.purchase(body);
+    return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Purchase error:', error);
+
     if (error instanceof FatZebraError) {
-      return createNextResponse({
-        successful: false,
-        errors: error.errors,
-        response: error.response
-      }, 400);
+      return createNextResponse(
+        {
+          successful: false,
+          error: error.message,
+          details: error.errors,
+        },
+        400
+      );
     }
 
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
  * Process an authorization transaction with Next.js
  */
-export async function handleAuthorization(request: NextRequest): Promise<NextResponse> {
+export async function handleAuthorization(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
-    const body = await request.json();
-    const { authData, config } = body;
+    const body: AuthorizationRequest = await request.json();
 
-    if (!authData || !config) {
-      return createNextResponse({
-        successful: false,
-        errors: ['authData and config are required']
-      }, 400);
+    if (!body.amount || !body.currency || !body.card_number) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing required fields: amount, currency, card_number'] },
+        400
+      );
     }
 
-    const client = createFatZebraClient(config);
-    const result = await client.authorize(authData as AuthorizationRequest);
-    
-    return createNextResponse(result);
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+    });
+
+    const response = await client.authorize(body);
+    return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Authorization error:', error);
+
     if (error instanceof FatZebraError) {
-      return createNextResponse({
-        successful: false,
-        errors: error.errors,
-        response: error.response
-      }, 400);
+      return createNextResponse(
+        {
+          successful: false,
+          error: error.message,
+          details: error.errors,
+        },
+        400
+      );
     }
 
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
- * Capture a previously authorized transaction with Next.js
+ * Capture a previously authorized transaction
  */
-export async function handleCapture(request: NextRequest): Promise<NextResponse> {
+export async function handleCapture(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
     const body = await request.json();
-    const { transactionId, amount, config } = body;
+    const { transactionId, amount } = body;
 
-    if (!transactionId || !config) {
-      return createNextResponse({
-        successful: false,
-        errors: ['transactionId and config are required']
-      }, 400);
+    if (!transactionId) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing required field: transactionId'] },
+        400
+      );
     }
 
-    const client = createFatZebraClient(config);
-    const result = await client.capture(transactionId, amount);
-    
-    return createNextResponse(result);
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+    });
+
+    const response = await client.capture(transactionId, amount);
+    return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Capture error:', error);
+
     if (error instanceof FatZebraError) {
-      return createNextResponse({
-        successful: false,
-        errors: error.errors,
-        response: error.response
-      }, 400);
+      return createNextResponse(
+        {
+          successful: false,
+          error: error.message,
+          details: error.errors,
+        },
+        400
+      );
     }
 
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
  * Process a refund transaction with Next.js
  */
-export async function handleRefund(request: NextRequest): Promise<NextResponse> {
+export async function handleRefund(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
-    const body = await request.json();
-    const { refundData, config } = body;
+    const body: RefundRequest = await request.json();
 
-    if (!refundData || !config) {
-      return createNextResponse({
-        successful: false,
-        errors: ['refundData and config are required']
-      }, 400);
+    if (!body.transaction_id && !body.reference) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing required field: transaction_id or reference'] },
+        400
+      );
     }
 
-    const client = createFatZebraClient(config);
-    const result = await client.refund(refundData as RefundRequest);
-    
-    return createNextResponse(result);
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+    });
+
+    const response = await client.refund(body);
+    return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Refund error:', error);
+
     if (error instanceof FatZebraError) {
-      return createNextResponse({
-        successful: false,
-        errors: error.errors,
-        response: error.response
-      }, 400);
+      return createNextResponse(
+        {
+          successful: false,
+          error: error.message,
+          details: error.errors,
+        },
+        400
+      );
     }
 
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
- * Tokenize card details with Next.js
+ * Tokenize a card with Next.js
  */
-export async function handleTokenization(request: NextRequest): Promise<NextResponse> {
+export async function handleTokenization(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
-    const body = await request.json();
-    const { tokenData, config } = body;
+    const body: TokenizationRequest = await request.json();
 
-    if (!tokenData || !config) {
-      return createNextResponse({
-        successful: false,
-        errors: ['tokenData and config are required']
-      }, 400);
+    if (!body.card_number || !body.card_expiry || !body.card_holder) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing required card fields'] },
+        400
+      );
     }
 
-    const client = createFatZebraClient(config);
-    const result = await client.tokenize(tokenData as TokenizationRequest);
-    
-    return createNextResponse(result);
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+    });
+
+    const response = await client.tokenize(body);
+    return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Tokenization error:', error);
+
     if (error instanceof FatZebraError) {
-      return createNextResponse({
-        successful: false,
-        errors: error.errors,
-        response: error.response
-      }, 400);
+      return createNextResponse(
+        {
+          successful: false,
+          error: error.message,
+          details: error.errors,
+        },
+        400
+      );
     }
 
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
  * Void a transaction with Next.js
  */
-export async function handleVoid(request: NextRequest): Promise<NextResponse> {
+export async function handleVoid(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
     const body = await request.json();
-    const { transactionId, config } = body;
+    const { transactionId } = body;
 
-    if (!transactionId || !config) {
-      return createNextResponse({
-        successful: false,
-        errors: ['transactionId and config are required']
-      }, 400);
+    if (!transactionId) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing required field: transactionId'] },
+        400
+      );
     }
 
-    const client = createFatZebraClient(config);
-    const result = await client.void(transactionId);
-    
-    return createNextResponse(result);
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+    });
+
+    const response = await client.void(transactionId);
+    return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Void error:', error);
+
     if (error instanceof FatZebraError) {
-      return createNextResponse({
-        successful: false,
-        errors: error.errors,
-        response: error.response
-      }, 400);
+      return createNextResponse(
+        {
+          successful: false,
+          error: error.message,
+          details: error.errors,
+        },
+        400
+      );
     }
 
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
  * Get transaction status with Next.js
  */
-export async function handleTransactionStatus(request: NextRequest): Promise<NextResponse> {
+export async function handleTransactionStatus(request: any): Promise<any> {
   try {
-    if (request.method !== 'POST') {
+    if (request.method !== 'GET') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
-    const body = await request.json();
-    const { transactionId, config } = body;
+    const url = new URL(request.url);
+    const transactionId = url.searchParams.get('id');
 
-    if (!transactionId || !config) {
-      return createNextResponse({
-        successful: false,
-        errors: ['transactionId and config are required']
-      }, 400);
+    if (!transactionId) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing required parameter: id'] },
+        400
+      );
     }
 
-    const client = createFatZebraClient(config);
-    const result = await client.getTransaction(transactionId);
-    
-    return createNextResponse(result);
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+    });
+
+    const response = await client.getTransaction(transactionId);
+    return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Transaction status error:', error);
+
     if (error instanceof FatZebraError) {
-      return createNextResponse({
-        successful: false,
-        errors: error.errors,
-        response: error.response
-      }, 400);
+      return createNextResponse(
+        {
+          successful: false,
+          error: error.message,
+          details: error.errors,
+        },
+        400
+      );
     }
 
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
  * Verify webhook signature with Next.js
  */
-export async function handleVerifyWebhook(request: NextRequest): Promise<NextResponse> {
+export async function handleVerifyWebhook(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
-    const body = await request.json();
-    const { payload, sharedSecret } = body;
-    const signature = request.headers.get('x-fatzebra-signature') || request.headers.get('x-fatzebra-hmac');
+    const body = await request.text();
+    const signature = request.headers.get?.('x-fz-signature') || request.headers['x-fz-signature'];
 
-    if (!payload || !sharedSecret || !signature) {
-      return createNextResponse({
-        successful: false,
-        errors: ['payload, sharedSecret, and signature are required']
-      }, 400);
+    if (!signature) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing webhook signature'] },
+        400
+      );
     }
 
-    const expectedHash = generateVerificationHash(payload, sharedSecret);
-    const isValid = expectedHash === signature;
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+      sharedSecret: process.env.FAT_ZEBRA_SHARED_SECRET,
+    });
 
+    const isValid = client.verifyWebhookSignature(body, signature);
+    
+    if (!isValid) {
+      return createNextResponse(
+        { successful: false, errors: ['Invalid webhook signature'] },
+        401
+      );
+    }
+
+    const webhookData: WebhookEvent = JSON.parse(body);
+    
     return createNextResponse({
       successful: true,
-      verified: isValid,
-      payload: isValid ? payload : null,
-      clientIP: getClientIP(request)
+      verified: true,
+      event: webhookData
     });
   } catch (error) {
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    console.error('Webhook verification error:', error);
+
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
  * Generate verification hash with Next.js
  */
-export async function handleGenerateHash(request: NextRequest): Promise<NextResponse> {
+export async function handleGenerateHash(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
     const body = await request.json();
-    const { data, sharedSecret } = body;
+    const { reference, amount, currency } = body;
 
-    if (!data || !sharedSecret) {
-      return createNextResponse({
-        successful: false,
-        errors: ['data and sharedSecret are required']
-      }, 400);
+    if (!reference || amount === undefined || !currency) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing required fields: reference, amount, currency'] },
+        400
+      );
     }
 
-    const hash = generateVerificationHash(data, sharedSecret);
+    const hash = generateVerificationHash({
+      reference,
+      amount,
+      currency,
+      sharedSecret: process.env.FAT_ZEBRA_SHARED_SECRET || '',
+    });
 
     return createNextResponse({
       successful: true,
-      hash
+      hash,
+      reference,
+      amount,
+      currency
     });
   } catch (error) {
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    console.error('Hash generation error:', error);
+
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
 
 /**
- * Enhanced webhook handler for Next.js with additional features
+ * Enhanced webhook handler with database integration (Next.js specific)
  */
-export async function handleEnhancedWebhook(request: NextRequest): Promise<NextResponse> {
+export async function handleEnhancedWebhook(request: any): Promise<any> {
   try {
     if (request.method !== 'POST') {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
-    const body = await request.json();
-    const signature = request.headers.get('x-fatzebra-signature') || request.headers.get('x-fatzebra-hmac');
-    const contentType = request.headers.get('content-type');
-    const userAgent = request.headers.get('user-agent');
-    const clientIP = getClientIP(request);
+    const body = await request.text();
+    const signature = request.headers.get?.('x-fz-signature') || request.headers['x-fz-signature'];
 
-    // Log webhook attempt for debugging
-    console.log('Webhook received:', {
-      clientIP,
-      contentType,
-      userAgent,
-      hasSignature: !!signature,
-      bodySize: JSON.stringify(body).length
+    if (!signature) {
+      return createNextResponse(
+        { successful: false, errors: ['Missing webhook signature'] },
+        400
+      );
+    }
+
+    const client = createFatZebraClient({
+      username: process.env.FAT_ZEBRA_USERNAME!,
+      token: process.env.FAT_ZEBRA_TOKEN!,
+      sandbox: process.env.NODE_ENV !== 'production',
+      sharedSecret: process.env.FAT_ZEBRA_SHARED_SECRET,
     });
 
-    const { payload, sharedSecret } = body;
-
-    if (!payload || !sharedSecret || !signature) {
-      return createNextResponse({
-        successful: false,
-        errors: ['payload, sharedSecret, and signature are required']
-      }, 400);
-    }
-
-    const expectedHash = generateVerificationHash(payload, sharedSecret);
-    const isValid = expectedHash === signature;
-
+    const isValid = client.verifyWebhookSignature(body, signature);
+    
     if (!isValid) {
-      console.warn('Webhook signature verification failed:', {
-        clientIP,
-        expectedHash: expectedHash.substring(0, 8) + '...',
-        receivedHash: signature.substring(0, 8) + '...'
-      });
+      return createNextResponse(
+        { successful: false, errors: ['Invalid webhook signature'] },
+        401
+      );
     }
 
+    const webhookData: WebhookEvent = JSON.parse(body);
+    
+    // Here you would typically update your database
+    // Example: await updatePaymentStatus(webhookData);
+    
     return createNextResponse({
       successful: true,
-      verified: isValid,
-      payload: isValid ? payload : null,
-      metadata: {
-        clientIP,
-        timestamp: new Date().toISOString(),
-        contentType,
-        userAgent
-      }
+      verified: true,
+      processed: true,
+      event_type: webhookData.type,
+      transaction_id: webhookData.data?.id
     });
   } catch (error) {
-    console.error('Webhook processing error:', error);
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    console.error('Enhanced webhook error:', error);
+
+    return createNextResponse(
+      {
+        successful: false,
+        error: extractErrorMessage(error),
+      },
+      500
+    );
   }
 }
