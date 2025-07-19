@@ -1,42 +1,31 @@
 # Dependencies
 node_modules/
-.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+.next/
+out/
 
 # Production builds
 dist/
 build/
-.next/
-out/
 
-# Environment files
+# Environment variables
 .env
 .env.local
-.env.production
-.env.staging
-.env.development
+.env.development.local
+.env.test.local
+.env.production.local
 
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Testing
+coverage/
+.nyc_output
 
 # Logs
+logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
 
 # Runtime data
 pids
@@ -44,29 +33,8 @@ pids
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-.nyc_output
-
-# Dependency directories
-node_modules/
-jspm_packages/
-
 # Optional npm cache directory
 .npm
-
-# Optional eslint cache
-.eslintcache
-
-# Optional stylelint cache
-.stylelintcache
-
-# Microbundle cache
-.rpt2_cache/
-.rts2_cache_cjs/
-.rts2_cache_es/
-.rts2_cache_umd/
 
 # Optional REPL history
 .node_repl_history
@@ -81,57 +49,23 @@ jspm_packages/
 .cache
 .parcel-cache
 
-# Next.js build output
-.next
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-# Nuxt.js build / generate output
-.nuxt
-dist
+# OS
+.DS_Store
+Thumbs.db
 
-# Storybook build outputs
-.out
-.storybook-out
+# Backup
+backup/
 
-# Temporary folders
+# Temporary files
 tmp/
 temp/
 
-# Editor directories and files
-.idea
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# Backup files
-backup/
-*.backup
-*.bak
-*.orig
-
-# Test files
-test-results/
-playwright-report/
-
-# TypeScript cache
-*.tsbuildinfo
-
-# Rollup cache
-.rollup.cache/
-
-# Webpack cache
-.webpack/
-
-# Jest cache
-.jest/
-
-# ESLint cache
-.eslintcache
-
-# Prettier cache
-.prettiercache
-
-# Build artifacts
-*.tgz
-*.tar.gz
+# Package lock files (choose one)
+# package-lock.json
+# yarn.lock

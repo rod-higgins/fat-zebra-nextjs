@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Environment,
   Payment,
@@ -10,8 +10,22 @@ import {
   Handlers,
 } from '@fat-zebra/sdk/dist';
 import { VerifyCard } from '@fat-zebra/sdk/dist/react';
-import { validateCard, formatCardExpiry, formatCardNumber } from '../utils';
-import type { CardDetails, PaymentFormData, PaymentFormProps } from '../types';
+import { 
+  validateCard, 
+  formatCardExpiry, 
+  formatCardNumber, 
+  detectCardType,
+  validateEmail,
+  formatCurrency,
+  generateReference
+} from '../utils';
+import type { 
+  CardDetails, 
+  PaymentFormData, 
+  PaymentFormProps, 
+  PaymentFormErrors,
+  CardType 
+} from '../types';
 
 export function PaymentForm({ 
   onSubmit, 
@@ -25,7 +39,9 @@ export function PaymentForm({
   onScaError,
   className = '',
   accessToken,
-  username
+  username,
+  showAmountField = !amount,
+  requireCustomer = false
 }: PaymentFormProps) {
   const [formData, setFormData] = useState({
     card_holder: '',
@@ -34,27 +50,40 @@ export function PaymentForm({
     expiry_year: '',
     cvv: '',
     amount: amount || 0,
-    reference: `ORDER-${Date.now()}`
+    reference: generateReference(),
+    email: '',
+    first_name: '',
+    last_name: '',
+    phone: ''
   });
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [cardType, setCardType] = useState<string>('');
+  const [errors, setErrors] = useState<PaymentFormErrors>({});
+  const [cardType, setCardType] = useState<CardType>('unknown');
   const [tokenizationMode, setTokenizationMode] = useState(false);
   const [events, setEvents] = useState<Array<any>>([]);
   const [verificationHash, setVerificationHash] = useState<string>('');
+  const [isValidating, setIsValidating] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  
+  const formRef = useRef<HTMLFormElement>(null);
+  const scaCompletedRef = useRef(false);
 
   // Generate verification hash when form data changes
   useEffect(() => {
     if (enableTokenization && accessToken && formData.reference && formData.amount > 0) {
-      // This should be generated server-side in production
-      // Here we're showing the client-side integration pattern
       generateVerificationHash();
     }
   }, [formData.reference, formData.amount, enableTokenization, accessToken]);
 
+  // Detect card type on card number change
+  useEffect(() => {
+    const type = detectCardType(formData.card_number);
+    setCardType(type);
+  }, [formData.card_number]);
+
   const generateVerificationHash = async () => {
     try {
-      const response = await fetch('/api/generate-verification-hash', {
+      const response = await fetch('/api/fat-zebra/verification-hash', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,398 +94,427 @@ export function PaymentForm({
           currency: currency
         })
       });
-      
-      const data = await response.json();
-      if (data.hash) {
-        setVerificationHash(data.hash);
+
+      if (response.ok) {
+        const { hash } = await response.json();
+        setVerificationHash(hash);
       }
     } catch (error) {
       console.error('Failed to generate verification hash:', error);
     }
   };
 
-  const addEvent = useCallback((event: any) => {
-    setEvents((prev) => [...prev, event]);
-  }, []);
-
-  const handleCardNumberChange = (value: string) => {
-    const formatted = formatCardNumber(value);
-    const cleaned = value.replace(/\D/g, '');
-    const validation = validateCard(cleaned);
+  const validateForm = useCallback((): boolean => {
+    const newErrors: PaymentFormErrors = {};
     
-    setFormData(prev => ({ ...prev, card_number: cleaned }));
-    setCardType(validation.type || '');
-    
-    if (cleaned && !validation.isValid) {
-      setErrors(prev => ({ ...prev, card_number: 'Invalid card number' }));
-    } else {
-      setErrors(prev => ({ ...prev, card_number: '' }));
-    }
-  };
-
-  const handleExpiryChange = (value: string) => {
-    const formatted = formatCardExpiry(value);
-    const [month, year] = formatted.split('/');
-    
-    setFormData(prev => ({ 
-      ...prev, 
-      expiry_month: month || '',
-      expiry_year: year || ''
-    }));
-    
-    if (formatted && (month && year)) {
-      const currentYear = new Date().getFullYear() % 100;
-      const currentMonth = new Date().getMonth() + 1;
-      
-      if (parseInt(year) < currentYear || 
-          (parseInt(year) === currentYear && parseInt(month) < currentMonth)) {
-        setErrors(prev => ({ ...prev, expiry: 'Card has expired' }));
-      } else {
-        setErrors(prev => ({ ...prev, expiry: '' }));
-      }
-    }
-  };
-
-  const validateForm = (): boolean => {
-    const validationErrors: Record<string, string> = {};
-    
+    // Card holder validation
     if (!formData.card_holder.trim()) {
-      validationErrors.card_holder = 'Card holder name is required';
+      newErrors.card_holder = 'Card holder name is required';
+    } else if (formData.card_holder.trim().length < 2) {
+      newErrors.card_holder = 'Card holder name must be at least 2 characters';
     }
-    
-    if (!formData.card_number) {
-      validationErrors.card_number = 'Card number is required';
+
+    // Card number validation
+    const cardValidation = validateCard(formData.card_number);
+    if (!cardValidation.isValid) {
+      newErrors.card_number = cardValidation.errors[0] || 'Invalid card number';
+    }
+
+    // Expiry validation
+    if (!formData.expiry_month || !formData.expiry_year) {
+      newErrors.card_expiry = 'Expiry date is required';
     } else {
-      const validation = validateCard(formData.card_number);
-      if (!validation.isValid) {
-        validationErrors.card_number = 'Invalid card number';
+      const now = new Date();
+      const currentYear = now.getFullYear() % 100;
+      const currentMonth = now.getMonth() + 1;
+      const expMonth = parseInt(formData.expiry_month);
+      const expYear = parseInt(formData.expiry_year);
+
+      if (expYear < currentYear || (expYear === currentYear && expMonth < currentMonth)) {
+        newErrors.card_expiry = 'Card has expired';
       }
     }
-    
-    if (!formData.expiry_month || !formData.expiry_year) {
-      validationErrors.expiry = 'Expiry date is required';
-    }
-    
+
+    // CVV validation
     if (!formData.cvv) {
-      validationErrors.cvv = 'CVV is required';
-    } else if (formData.cvv.length < 3) {
-      validationErrors.cvv = 'CVV must be at least 3 digits';
+      newErrors.cvv = 'CVV is required';
+    } else if (!/^\d{3,4}$/.test(formData.cvv)) {
+      newErrors.cvv = 'CVV must be 3 or 4 digits';
     }
-    
-    if (!amount && formData.amount <= 0) {
-      validationErrors.amount = 'Amount must be greater than 0';
+
+    // Amount validation
+    if (showAmountField && (!formData.amount || formData.amount <= 0)) {
+      newErrors.amount = 'Amount must be greater than 0';
     }
-    
-    if (!formData.reference.trim()) {
-      validationErrors.reference = 'Reference is required';
+
+    // Customer validation if required
+    if (requireCustomer) {
+      if (!formData.email) {
+        newErrors.email = 'Email is required';
+      } else if (!validateEmail(formData.email)) {
+        newErrors.email = 'Invalid email address';
+      }
     }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }, [formData, showAmountField, requireCustomer]);
+
+  const handleInputChange = (field: string, value: string) => {
+    let processedValue = value;
+
+    // Format specific fields
+    switch (field) {
+      case 'card_number':
+        processedValue = formatCardNumber(value);
+        break;
+      case 'card_expiry':
+        processedValue = formatCardExpiry(value);
+        const [month, year] = processedValue.split('/');
+        setFormData(prev => ({ 
+          ...prev, 
+          expiry_month: month || '', 
+          expiry_year: year || '' 
+        }));
+        return;
+      case 'cvv':
+        processedValue = value.replace(/\D/g, '').slice(0, 4);
+        break;
+      case 'amount':
+        const numericValue = parseFloat(value) || 0;
+        setFormData(prev => ({ ...prev, [field]: numericValue }));
+        return;
+      case 'phone':
+        processedValue = value.replace(/[^\d\s\-\(\)\+]/g, '');
+        break;
+      default:
+        break;
+    }
+
+    setFormData(prev => ({ ...prev, [field]: processedValue }));
     
-    setErrors(validationErrors);
-    return Object.keys(validationErrors).length === 0;
+    // Clear error when user starts typing
+    if (errors[field as keyof PaymentFormErrors]) {
+      setErrors(prev => ({ ...prev, [field]: undefined }));
+    }
   };
 
-  const handleTokenizationSuccess = useCallback((event: any) => {
-    addEvent(event);
-    const token = event.detail?.token || event.token;
-    if (token && onTokenizationSuccess) {
-      onTokenizationSuccess(token);
+  const handleBlur = (field: string) => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+    
+    // Validate specific field on blur
+    if (touched[field]) {
+      validateForm();
     }
-  }, [addEvent, onTokenizationSuccess]);
-
-  const handleScaSuccess = useCallback((event: any) => {
-    addEvent(event);
-    if (onScaSuccess) {
-      onScaSuccess(event);
-    }
-  }, [addEvent, onScaSuccess]);
-
-  const handleScaError = useCallback((event: any) => {
-    addEvent(event);
-    if (onScaError) {
-      onScaError(event);
-    }
-  }, [addEvent, onScaError]);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (!validateForm() || loading) {
       return;
     }
 
-    // If tokenization is enabled and we have the required config, use SDK
-    if (enableTokenization && accessToken && username && verificationHash) {
-      setTokenizationMode(true);
-      return;
-    }
-
-    // Otherwise, proceed with traditional form submission
     const paymentData: PaymentFormData = {
-      amount: amount || formData.amount,
+      amount: formData.amount,
       currency,
       reference: formData.reference,
       cardDetails: {
         card_holder: formData.card_holder,
-        card_number: formData.card_number,
+        card_number: formData.card_number.replace(/\s/g, ''),
         card_expiry: `${formData.expiry_month}/${formData.expiry_year}`,
         cvv: formData.cvv
       }
     };
 
+    if (requireCustomer) {
+      paymentData.customer = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: formData.email,
+        phone: formData.phone
+      };
+    }
+
     try {
       await onSubmit(paymentData);
     } catch (error) {
       console.error('Payment submission failed:', error);
+      setErrors({ general: 'Payment failed. Please try again.' });
     }
   };
 
-  // SDK Configuration for tokenization
-  const payment: Payment = {
-    reference: formData.reference,
-    amount: amount || formData.amount,
-    currency: currency,
+  const getCardIcon = (type: CardType): string => {
+    const icons = {
+      visa: '💳',
+      mastercard: '💳',
+      amex: '💳',
+      diners: '💳',
+      discover: '💳',
+      jcb: '💳',
+      unknown: '💳'
+    };
+    return icons[type] || icons.unknown;
   };
 
-  const paymentIntent: PaymentIntent = {
-    payment,
-    verification: verificationHash,
-  };
+  const inputClasses = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors";
+  const errorInputClasses = "w-full px-3 py-2 border border-red-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors bg-red-50";
+  const labelClasses = "block text-sm font-medium text-gray-700 mb-1";
+  const errorClasses = "text-red-600 text-sm mt-1";
 
-  const config: PaymentConfig = {
-    username: username || 'TEST',
-    environment: process.env.NODE_ENV === 'production' ? Environment.production : Environment.sandbox,
-    accessToken: accessToken || '',
-    paymentIntent: paymentIntent,
-    options: {
-      sca_enabled: enable3DS,
-    },
-  };
-
-  const handlers: Handlers = {
-    [PublicEvent.FORM_VALIDATION_ERROR]: addEvent,
-    [PublicEvent.FORM_VALIDATION_SUCCESS]: addEvent,
-    [PublicEvent.TOKENIZATION_SUCCESS]: handleTokenizationSuccess,
-    [PublicEvent.SCA_SUCCESS]: handleScaSuccess,
-    [PublicEvent.SCA_ERROR]: handleScaError,
-  };
-
-  // If in tokenization mode and we have all required config, show SDK component
-  if (tokenizationMode && accessToken && username && verificationHash) {
-    return (
-      <div className={`fat-zebra-payment-form ${className}`}>
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold mb-2">Secure Payment</h3>
-          <p className="text-sm text-gray-600">
-            Amount: {currency} {(amount || formData.amount).toFixed(2)}
-          </p>
-          <p className="text-sm text-gray-600">
-            Reference: {formData.reference}
-          </p>
-        </div>
-        
+  return (
+    <div className={`payment-form ${className}`}>
+      {/* 3DS2 Integration */}
+      {enable3DS && enableTokenization && accessToken && username && (
         <VerifyCard
-          handlers={handlers}
-          config={config}
-          iframeProps={{ width: "100%", height: "500px" }}
+          username={username}
+          environment={Environment.sandbox}
+          accessToken={accessToken}
+          paymentIntent={{
+            payment: {
+              reference: formData.reference,
+              amount: formData.amount,
+              currency: currency
+            },
+            verification: verificationHash
+          }}
+          onScaSuccess={(event) => {
+            scaCompletedRef.current = true;
+            onScaSuccess?.(event);
+          }}
+          onScaError={(error) => {
+            console.error('3DS error:', error);
+            onScaError?.(error);
+            setErrors({ general: '3D Secure authentication failed' });
+          }}
+          options={{
+            sca_enabled: true,
+          }}
         />
-        
-        {events.length > 0 && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <h4 className="font-semibold mb-2">Payment Events:</h4>
-            <div className="space-y-1 max-h-32 overflow-y-auto">
-              {events.map((event, index) => (
-                <div key={index} className="text-xs text-gray-600">
-                  {event.type || event.name || JSON.stringify(event)}
-                </div>
-              ))}
-            </div>
+      )}
+
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
+        {errors.general && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-3">
+            <div className="text-red-600 text-sm">{errors.general}</div>
           </div>
         )}
-        
-        <button
-          type="button"
-          onClick={() => setTokenizationMode(false)}
-          className="mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-        >
-          ← Back to manual entry
-        </button>
-      </div>
-    );
-  }
 
-  // Traditional form UI
-  return (
-    <form onSubmit={handleSubmit} className={`fat-zebra-payment-form ${className}`}>
-      <div className="space-y-4">
-        {/* Card Holder Name */}
-        <div>
-          <label htmlFor="card_holder" className="block text-sm font-medium text-gray-700 mb-1">
-            Card Holder Name
-          </label>
-          <input
-            type="text"
-            id="card_holder"
-            value={formData.card_holder}
-            onChange={(e) => setFormData(prev => ({ ...prev, card_holder: e.target.value }))}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.card_holder ? 'border-red-500' : 'border-gray-300'
-            }`}
-            placeholder="John Doe"
-            disabled={loading}
-          />
-          {errors.card_holder && (
-            <p className="mt-1 text-sm text-red-600">{errors.card_holder}</p>
-          )}
-        </div>
-
-        {/* Card Number */}
-        <div>
-          <label htmlFor="card_number" className="block text-sm font-medium text-gray-700 mb-1">
-            Card Number
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              id="card_number"
-              value={formatCardNumber(formData.card_number)}
-              onChange={(e) => handleCardNumberChange(e.target.value)}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.card_number ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="4111 1111 1111 1111"
-              maxLength={19}
-              disabled={loading}
-            />
-            {cardType && (
-              <div className="absolute right-2 top-2">
-                <span className="text-xs text-gray-500 uppercase">{cardType}</span>
-              </div>
-            )}
-          </div>
-          {errors.card_number && (
-            <p className="mt-1 text-sm text-red-600">{errors.card_number}</p>
-          )}
-        </div>
-
-        {/* Expiry and CVV */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Amount Field */}
+        {showAmountField && (
           <div>
-            <label htmlFor="expiry" className="block text-sm font-medium text-gray-700 mb-1">
-              Expiry Date
-            </label>
-            <input
-              type="text"
-              id="expiry"
-              value={`${formData.expiry_month}${formData.expiry_year ? '/' + formData.expiry_year : ''}`}
-              onChange={(e) => handleExpiryChange(e.target.value)}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.expiry ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="MM/YY"
-              maxLength={5}
-              disabled={loading}
-            />
-            {errors.expiry && (
-              <p className="mt-1 text-sm text-red-600">{errors.expiry}</p>
-            )}
-          </div>
-          
-          <div>
-            <label htmlFor="cvv" className="block text-sm font-medium text-gray-700 mb-1">
-              CVV
-            </label>
-            <input
-              type="text"
-              id="cvv"
-              value={formData.cvv}
-              onChange={(e) => setFormData(prev => ({ ...prev, cvv: e.target.value.replace(/\D/g, '') }))}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.cvv ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="123"
-              maxLength={4}
-              disabled={loading}
-            />
-            {errors.cvv && (
-              <p className="mt-1 text-sm text-red-600">{errors.cvv}</p>
-            )}
-          </div>
-        </div>
-
-        {/* Amount (if not provided as prop) */}
-        {!amount && (
-          <div>
-            <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="amount" className={labelClasses}>
               Amount ({currency})
             </label>
             <input
-              type="number"
               id="amount"
-              value={formData.amount}
-              onChange={(e) => setFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
-              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                errors.amount ? 'border-red-500' : 'border-gray-300'
-              }`}
-              placeholder="10.00"
-              min="0.01"
+              type="number"
               step="0.01"
+              min="0"
+              value={formData.amount || ''}
+              onChange={(e) => handleInputChange('amount', e.target.value)}
+              onBlur={() => handleBlur('amount')}
+              className={errors.amount ? errorInputClasses : inputClasses}
+              placeholder="0.00"
               disabled={loading}
             />
-            {errors.amount && (
-              <p className="mt-1 text-sm text-red-600">{errors.amount}</p>
-            )}
+            {errors.amount && <div className={errorClasses}>{errors.amount}</div>}
           </div>
         )}
 
-        {/* Reference */}
-        <div>
-          <label htmlFor="reference" className="block text-sm font-medium text-gray-700 mb-1">
-            Reference
-          </label>
-          <input
-            type="text"
-            id="reference"
-            value={formData.reference}
-            onChange={(e) => setFormData(prev => ({ ...prev, reference: e.target.value }))}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-              errors.reference ? 'border-red-500' : 'border-gray-300'
-            }`}
-            placeholder="ORDER-12345"
-            disabled={loading}
-          />
-          {errors.reference && (
-            <p className="mt-1 text-sm text-red-600">{errors.reference}</p>
-          )}
+        {/* Card Details */}
+        <div className="grid grid-cols-1 gap-4">
+          {/* Card Holder */}
+          <div>
+            <label htmlFor="card_holder" className={labelClasses}>
+              Card Holder Name
+            </label>
+            <input
+              id="card_holder"
+              type="text"
+              value={formData.card_holder}
+              onChange={(e) => handleInputChange('card_holder', e.target.value)}
+              onBlur={() => handleBlur('card_holder')}
+              className={errors.card_holder ? errorInputClasses : inputClasses}
+              placeholder="John Doe"
+              disabled={loading}
+              autoComplete="cc-name"
+            />
+            {errors.card_holder && <div className={errorClasses}>{errors.card_holder}</div>}
+          </div>
+
+          {/* Card Number */}
+          <div>
+            <label htmlFor="card_number" className={labelClasses}>
+              Card Number
+            </label>
+            <div className="relative">
+              <input
+                id="card_number"
+                type="text"
+                value={formData.card_number}
+                onChange={(e) => handleInputChange('card_number', e.target.value)}
+                onBlur={() => handleBlur('card_number')}
+                className={errors.card_number ? errorInputClasses : inputClasses}
+                placeholder="1234 5678 9012 3456"
+                disabled={loading}
+                autoComplete="cc-number"
+                maxLength={19}
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                <span className="text-lg" title={cardType}>
+                  {getCardIcon(cardType)}
+                </span>
+              </div>
+            </div>
+            {errors.card_number && <div className={errorClasses}>{errors.card_number}</div>}
+          </div>
+
+          {/* Expiry and CVV */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="card_expiry" className={labelClasses}>
+                Expiry (MM/YY)
+              </label>
+              <input
+                id="card_expiry"
+                type="text"
+                value={`${formData.expiry_month}${formData.expiry_year ? '/' + formData.expiry_year : ''}`}
+                onChange={(e) => handleInputChange('card_expiry', e.target.value)}
+                onBlur={() => handleBlur('card_expiry')}
+                className={errors.card_expiry ? errorInputClasses : inputClasses}
+                placeholder="12/25"
+                disabled={loading}
+                autoComplete="cc-exp"
+                maxLength={5}
+              />
+              {errors.card_expiry && <div className={errorClasses}>{errors.card_expiry}</div>}
+            </div>
+
+            <div>
+              <label htmlFor="cvv" className={labelClasses}>
+                CVV
+              </label>
+              <input
+                id="cvv"
+                type="text"
+                value={formData.cvv}
+                onChange={(e) => handleInputChange('cvv', e.target.value)}
+                onBlur={() => handleBlur('cvv')}
+                className={errors.cvv ? errorInputClasses : inputClasses}
+                placeholder="123"
+                disabled={loading}
+                autoComplete="cc-csc"
+                maxLength={4}
+              />
+              {errors.cvv && <div className={errorClasses}>{errors.cvv}</div>}
+            </div>
+          </div>
         </div>
 
-        {/* Tokenization Option */}
-        {enableTokenization && accessToken && username && (
-          <div className="flex items-center space-x-2">
-            <button
-              type="button"
-              onClick={() => setTokenizationMode(true)}
-              className="text-sm text-blue-600 hover:text-blue-800 underline"
-            >
-              Use secure tokenization with 3D Secure
-            </button>
+        {/* Customer Details */}
+        {requireCustomer && (
+          <div className="space-y-4 border-t pt-4">
+            <h3 className="text-lg font-medium text-gray-900">Customer Information</h3>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="first_name" className={labelClasses}>
+                  First Name
+                </label>
+                <input
+                  id="first_name"
+                  type="text"
+                  value={formData.first_name}
+                  onChange={(e) => handleInputChange('first_name', e.target.value)}
+                  className={inputClasses}
+                  placeholder="John"
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="last_name" className={labelClasses}>
+                  Last Name
+                </label>
+                <input
+                  id="last_name"
+                  type="text"
+                  value={formData.last_name}
+                  onChange={(e) => handleInputChange('last_name', e.target.value)}
+                  className={inputClasses}
+                  placeholder="Doe"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="email" className={labelClasses}>
+                Email Address
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                onBlur={() => handleBlur('email')}
+                className={errors.email ? errorInputClasses : inputClasses}
+                placeholder="john@example.com"
+                disabled={loading}
+                autoComplete="email"
+              />
+              {errors.email && <div className={errorClasses}>{errors.email}</div>}
+            </div>
+
+            <div>
+              <label htmlFor="phone" className={labelClasses}>
+                Phone Number (Optional)
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => handleInputChange('phone', e.target.value)}
+                className={inputClasses}
+                placeholder="+61 400 000 000"
+                disabled={loading}
+                autoComplete="tel"
+              />
+            </div>
           </div>
         )}
-      </div>
 
-      {/* Submit Button */}
-      <button
-        type="submit"
-        disabled={loading}
-        className={`w-full mt-6 py-3 px-4 rounded-md font-medium transition-colors ${
-          loading
-            ? 'bg-gray-400 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500'
-        } text-white`}
-      >
-        {loading ? 'Processing...' : `Pay ${currency} ${(amount || formData.amount).toFixed(2)}`}
-      </button>
-    </form>
+        {/* Submit Button */}
+        <button
+          type="submit"
+          disabled={loading || isValidating}
+          className={`w-full py-3 px-4 rounded-md font-medium text-sm transition-colors ${
+            loading || isValidating
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700 focus:ring-2 focus:ring-blue-500'
+          } text-white`}
+        >
+          {loading 
+            ? 'Processing...' 
+            : isValidating 
+              ? 'Validating...'
+              : `Pay ${formatCurrency(formData.amount || amount || 0, currency)}`
+          }
+        </button>
+
+        {/* Security Notice */}
+        <div className="text-center">
+          <p className="text-xs text-gray-500">
+            🔒 Your payment information is encrypted and secure
+          </p>
+          {enableTokenization && (
+            <p className="text-xs text-gray-500 mt-1">
+              Card details will be securely tokenized for future use
+            </p>
+          )}
+        </div>
+      </form>
+    </div>
   );
 }
-
-export type { PaymentFormProps };

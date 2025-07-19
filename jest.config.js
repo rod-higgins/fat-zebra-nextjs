@@ -13,7 +13,8 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',
     '!src/**/*.d.ts',
-    '!src/index.ts'
+    '!src/index.ts',
+    '!src/**/index.ts'
   ],
   coverageThreshold: {
     global: {
@@ -22,5 +23,17 @@ module.exports = {
       lines: 80,
       statements: 80
     }
-  }
+  },
+  moduleNameMapping: {
+    '^@/(.*)$': '<rootDir>/src/$1'
+  },
+  testPathIgnorePatterns: [
+    '<rootDir>/.next/',
+    '<rootDir>/node_modules/',
+    '<rootDir>/dist/',
+    '<rootDir>/backup/'
+  ],
+  transformIgnorePatterns: [
+    'node_modules/(?!(@fat-zebra)/)'
+  ]
 };

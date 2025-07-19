@@ -1,10 +1,17 @@
+# Source files
 src/
 tests/
 examples/
 docs/
+
+# Development files
 backup/
 .github/
 scripts/
+.vscode/
+.idea/
+
+# Configuration files
 *.config.js
 *.config.ts
 tsconfig*.json
@@ -12,7 +19,33 @@ tsconfig*.json
 .eslintrc*
 .prettierrc*
 .gitignore
+jest.config.js
+rollup.config.js
+
+# Documentation
 CONTRIBUTING.md
 SECURITY.md
-rollup.config.js
-jest.config.js
+CODE_OF_CONDUCT.md
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# Testing
+coverage/
+.nyc_output
+
+# Logs
+*.log
+logs/
+
+# Cache
+.cache/
+.parcel-cache/
+
+# Temporary
+tmp/
+temp/

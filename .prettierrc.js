@@ -4,5 +4,25 @@ module.exports = {
   singleQuote: true,
   printWidth: 100,
   tabWidth: 2,
-  useTabs: false
+  useTabs: false,
+  quoteProps: 'as-needed',
+  bracketSpacing: true,
+  bracketSameLine: false,
+  arrowParens: 'avoid',
+  endOfLine: 'lf',
+  overrides: [
+    {
+      files: '*.json',
+      options: {
+        printWidth: 120
+      }
+    },
+    {
+      files: '*.md',
+      options: {
+        printWidth: 80,
+        proseWrap: 'always'
+      }
+    }
+  ]
 };
