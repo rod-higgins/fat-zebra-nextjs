@@ -1,6 +1,6 @@
 {
   "name": "@fwc/fat-zebra-nextjs",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Fat Zebra payment gateway integration for Next.js applications with TypeScript support",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
@@ -55,7 +55,7 @@
     "typecheck:nextjs": "tsc --noEmit --project tsconfig.nextjs.json",
     "typecheck:test": "tsc --noEmit --project tsconfig.test.json", 
     "typecheck:dev": "tsc --noEmit --project tsconfig.dev.json",
-    "typecheck:all": "npm run typecheck:standalone && npm run type-check:test && npm run type-check:dev",
+    "typecheck:all": "npm run typecheck:standalone && npm run typecheck:test && npm run typecheck:dev",
     "docs": "typedoc",
     "clean": "rimraf dist",
     "prepublishOnly": "npm run clean && npm run build && npm run test:standalone",
@@ -63,7 +63,7 @@
     "prepare": "husky install",
     "validate": "npm run typecheck && npm run lint && npm run test:standalone",
     "validate:nextjs": "npm run typecheck:nextjs && npm run lint && npm run test",
-    "validate:all": "npm run type-check:all && npm run lint && npm run test:standalone",
+    "validate:all": "npm run typecheck:all && npm run lint && npm run test:standalone",
     "format": "prettier --write \"src/**/*.{ts,tsx}\"",
     "checkformat": "prettier --check \"src/**/*.{ts,tsx}\"",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand --config jest.config.js"

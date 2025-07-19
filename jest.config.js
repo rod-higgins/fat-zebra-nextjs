@@ -87,11 +87,16 @@ module.exports = {
   // Module directories
   moduleDirectories: ['node_modules', '<rootDir>/src'],
   
-  // REMOVED: Deprecated globals configuration
-  // REMOVED: extensionsToTreatAsEsm configuration that was causing conflicts
-  
   // Test environment options
   testEnvironmentOptions: {
     url: 'http://localhost:3000'
+  },
+
+  // Globals for testing environment
+  globals: {
+    'ts-jest': {
+      tsconfig: './tsconfig.test.json',
+      isolatedModules: true
+    }
   }
 };

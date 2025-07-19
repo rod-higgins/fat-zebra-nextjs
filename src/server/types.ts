@@ -15,6 +15,7 @@ export interface StandaloneResponse {
   status: number;
   statusText?: string;
   headers?: Record<string, string>;
+  body?: string;
   json(data: any): StandaloneResponse;
 }
 
@@ -114,5 +115,173 @@ export function getClientIP(request: any): string {
     return Array.isArray(cfConnectingIP) ? cfConnectingIP[0] : cfConnectingIP;
   }
 
-  return '127.0.0.1';
+  return 'unknown';
+}
+
+// Configuration interface for server handlers
+export interface ServerConfig {
+  fatZebra: {
+    username: string;
+    token: string;
+    sandbox?: boolean;
+    sharedSecret?: string;
+    timeout?: number;
+  };
+  webhook?: {
+    verifySignature?: boolean;
+    allowedIPs?: string[];
+    enableLogging?: boolean;
+  };
+  cors?: {
+    origins?: string[];
+    methods?: string[];
+    headers?: string[];
+  };
+}
+
+// Enhanced request interface with additional metadata
+export interface EnhancedRequest extends StandaloneRequest {
+  clientIP?: string;
+  userAgent?: string;
+  timestamp?: Date;
+  requestId?: string;
+}
+
+// Enhanced response interface with metadata
+export interface EnhancedResponse extends StandaloneResponse {
+  requestId?: string;
+  processingTime?: number;
+  metadata?: Record<string, any>;
+}
+
+// Error handling types
+export interface ServerError {
+  code: string;
+  message: string;
+  details?: any;
+  stack?: string;
+}
+
+export interface ErrorResponse {
+  successful: false;
+  errors: string[];
+  code?: string;
+  requestId?: string;
+  timestamp?: string;
+}
+
+// Rate limiting types
+export interface RateLimitConfig {
+  windowMs: number;
+  maxRequests: number;
+  skipSuccessfulRequests?: boolean;
+  skipFailedRequests?: boolean;
+}
+
+export interface RateLimitInfo {
+  limit: number;
+  remaining: number;
+  reset: Date;
+  retryAfter?: number;
+}
+
+// Middleware types
+export type MiddlewareFunction = (
+  request: EnhancedRequest,
+  response: EnhancedResponse,
+  next: () => Promise<void>
+) => Promise<void>;
+
+export interface MiddlewareConfig {
+  cors?: boolean;
+  rateLimit?: RateLimitConfig;
+  logging?: boolean;
+  authentication?: boolean;
+  validation?: boolean;
+}
+
+// OAuth specific types for server-side operations
+export interface OAuthTokenRequest {
+  grant_type: 'client_credentials';
+  client_id: string;
+  client_secret: string;
+  scope?: string;
+}
+
+export interface OAuthTokenResponse {
+  access_token: string;
+  token_type: 'Bearer';
+  expires_in: number;
+  scope?: string;
+}
+
+// Webhook specific types
+export interface WebhookPayload {
+  id: string;
+  type: string;
+  data: any;
+  timestamp: string;
+  version: string;
+}
+
+export interface WebhookVerificationResult {
+  verified: boolean;
+  payload: WebhookPayload | null;
+  error?: string;
+}
+
+// Health check types
+export interface HealthCheckResponse {
+  status: 'ok' | 'error';
+  timestamp: string;
+  version: string;
+  mode: 'standalone' | 'nextjs';
+  services?: {
+    fatZebra: 'connected' | 'disconnected' | 'unknown';
+    database?: 'connected' | 'disconnected' | 'unknown';
+    cache?: 'connected' | 'disconnected' | 'unknown';
+  };
+  uptime?: number;
+  memory?: {
+    used: number;
+    total: number;
+    percentage: number;
+  };
+}
+
+// Cache types for standalone operation
+export interface CacheConfig {
+  ttl: number; // Time to live in milliseconds
+  maxSize: number; // Maximum number of items
+  checkPeriod?: number; // How often to check for expired items
+}
+
+export interface CacheItem<T = any> {
+  value: T;
+  expires: number;
+  created: number;
+}
+
+// Logging types
+export interface LogEntry {
+  timestamp: string;
+  level: 'info' | 'warn' | 'error' | 'debug';
+  message: string;
+  requestId?: string;
+  clientIP?: string;
+  method?: string;
+  url?: string;
+  statusCode?: number;
+  processingTime?: number;
+  error?: any;
+  metadata?: Record<string, any>;
+}
+
+export interface LoggerConfig {
+  level: 'info' | 'warn' | 'error' | 'debug';
+  format: 'json' | 'text';
+  destination: 'console' | 'file' | 'both';
+  filename?: string;
+  maxFileSize?: number;
+  maxFiles?: number;
 }

@@ -49,6 +49,24 @@ export type {
   StandaloneRequest,
   StandaloneResponse,
   RequestHandler,
+  ServerConfig,
+  EnhancedRequest,
+  EnhancedResponse,
+  ServerError,
+  ErrorResponse,
+  RateLimitConfig,
+  RateLimitInfo,
+  MiddlewareFunction,
+  MiddlewareConfig,
+  OAuthTokenRequest,
+  OAuthTokenResponse,
+  WebhookPayload,
+  WebhookVerificationResult,
+  HealthCheckResponse,
+  CacheConfig,
+  CacheItem,
+  LogEntry,
+  LoggerConfig,
 } from './types';
 
 export {
@@ -93,17 +111,34 @@ try {
   // Fallback to standalone
 }
 
+// Import standalone handlers as fallbacks
+import {
+  handlePurchase as handlePurchaseStandalone,
+  handleAuthorization as handleAuthorizationStandalone,
+  handleCapture as handleCaptureStandalone,
+  handleRefund as handleRefundStandalone,
+  handleTokenization as handleTokenizationStandalone,
+  handleVoid as handleVoidStandalone,
+  handleTransactionStatus as handleTransactionStatusStandalone,
+  handleVerifyWebhook as handleVerifyWebhookStandalone,
+  handleGenerateHash as handleGenerateHashStandalone,
+  handleHealthCheck as handleHealthCheckStandalone,
+} from './routes-standalone';
+
 // Export Next.js specific handlers if available, otherwise use standalone
-export const handlePurchaseNextJS = nextjsRoutes.handlePurchase || handlePurchase;
-export const handleAuthorizationNextJS = nextjsRoutes.handleAuthorization || handleAuthorization;
-export const handleCaptureNextJS = nextjsRoutes.handleCapture || handleCapture;
-export const handleRefundNextJS = nextjsRoutes.handleRefund || handleRefund;
-export const handleTokenizationNextJS = nextjsRoutes.handleTokenization || handleTokenization;
-export const handleVoidNextJS = nextjsRoutes.handleVoid || handleVoid;
-export const handleTransactionStatusNextJS = nextjsRoutes.handleTransactionStatus || handleTransactionStatus;
-export const handleVerifyWebhookNextJS = nextjsRoutes.handleVerifyWebhook || handleVerifyWebhook;
-export const handleGenerateHashNextJS = nextjsRoutes.handleGenerateHash || handleGenerateHash;
-export const handleHealthCheckNextJS = nextjsRoutes.handleHealthCheck || handleHealthCheck;
+export const handlePurchaseNextJS = nextjsRoutes.handlePurchase || handlePurchaseStandalone;
+export const handleAuthorizationNextJS = nextjsRoutes.handleAuthorization || handleAuthorizationStandalone;
+export const handleCaptureNextJS = nextjsRoutes.handleCapture || handleCaptureStandalone;
+export const handleRefundNextJS = nextjsRoutes.handleRefund || handleRefundStandalone;
+export const handleTokenizationNextJS = nextjsRoutes.handleTokenization || handleTokenizationStandalone;
+export const handleVoidNextJS = nextjsRoutes.handleVoid || handleVoidStandalone;
+export const handleTransactionStatusNextJS = nextjsRoutes.handleTransactionStatus || handleTransactionStatusStandalone;
+export const handleVerifyWebhookNextJS = nextjsRoutes.handleVerifyWebhook || handleVerifyWebhookStandalone;
+export const handleGenerateHashNextJS = nextjsRoutes.handleGenerateHash || handleGenerateHashStandalone;
+export const handleHealthCheckNextJS = nextjsRoutes.handleHealthCheck || handleHealthCheckStandalone;
+
+// Enhanced webhook handler for Next.js (if available)
+export const handleEnhancedWebhookNextJS = nextjsRoutes.handleEnhancedWebhook || handleVerifyWebhookStandalone;
 
 // Utility function to get appropriate handlers based on environment
 export function getRouteHandlers() {
@@ -112,16 +147,16 @@ export function getRouteHandlers() {
   return {
     isNextJS,
     handlers: {
-      purchase: isNextJS ? handlePurchaseNextJS : handlePurchase,
-      authorization: isNextJS ? handleAuthorizationNextJS : handleAuthorization,
-      capture: isNextJS ? handleCaptureNextJS : handleCapture,
-      refund: isNextJS ? handleRefundNextJS : handleRefund,
-      tokenization: isNextJS ? handleTokenizationNextJS : handleTokenization,
-      void: isNextJS ? handleVoidNextJS : handleVoid,
-      transactionStatus: isNextJS ? handleTransactionStatusNextJS : handleTransactionStatus,
-      verifyWebhook: isNextJS ? handleVerifyWebhookNextJS : handleVerifyWebhook,
-      generateHash: isNextJS ? handleGenerateHashNextJS : handleGenerateHash,
-      healthCheck: isNextJS ? handleHealthCheckNextJS : handleHealthCheck,
+      purchase: isNextJS ? handlePurchaseNextJS : handlePurchaseStandalone,
+      authorization: isNextJS ? handleAuthorizationNextJS : handleAuthorizationStandalone,
+      capture: isNextJS ? handleCaptureNextJS : handleCaptureStandalone,
+      refund: isNextJS ? handleRefundNextJS : handleRefundStandalone,
+      tokenization: isNextJS ? handleTokenizationNextJS : handleTokenizationStandalone,
+      void: isNextJS ? handleVoidNextJS : handleVoidStandalone,
+      transactionStatus: isNextJS ? handleTransactionStatusNextJS : handleTransactionStatusStandalone,
+      verifyWebhook: isNextJS ? handleVerifyWebhookNextJS : handleVerifyWebhookStandalone,
+      generateHash: isNextJS ? handleGenerateHashNextJS : handleGenerateHashStandalone,
+      healthCheck: isNextJS ? handleHealthCheckNextJS : handleHealthCheckStandalone,
     }
   };
 }
@@ -195,19 +230,18 @@ export function createHttpHandler(handler: RequestHandler) {
           
           // Convert our response to HTTP format
           if (response && typeof response === 'object') {
-            res.statusCode = response.status || 200;
-            
+            if (response.status) {
+              res.statusCode = response.status;
+            }
             if (response.headers) {
               Object.entries(response.headers).forEach(([key, value]) => {
                 res.setHeader(key, value);
               });
             }
-            
-            res.setHeader('Content-Type', 'application/json');
-            
             if (response.body) {
               res.end(response.body);
             } else {
+              res.setHeader('Content-Type', 'application/json');
               res.end(JSON.stringify(response));
             }
           } else {
@@ -215,7 +249,7 @@ export function createHttpHandler(handler: RequestHandler) {
             res.end(JSON.stringify(response));
           }
         } catch (error) {
-          console.error('Handler error:', error);
+          console.error('Request processing error:', error);
           res.statusCode = 500;
           res.setHeader('Content-Type', 'application/json');
           res.end(JSON.stringify({
@@ -225,13 +259,188 @@ export function createHttpHandler(handler: RequestHandler) {
         }
       });
     } catch (error) {
-      console.error('Request processing error:', error);
+      console.error('Handler error:', error);
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({
         successful: false,
         errors: [extractErrorMessage(error)]
       }));
+    }
+  };
+}
+
+// Helper function for creating Fastify handlers
+export function createFastifyHandler(handler: RequestHandler) {
+  return async (request: any, reply: any) => {
+    try {
+      // Convert Fastify request to our standard format
+      const standardRequest = {
+        method: request.method,
+        headers: request.headers,
+        body: JSON.stringify(request.body),
+        url: request.url,
+        json: () => Promise.resolve(request.body)
+      };
+
+      const response = await handler(standardRequest);
+      
+      // Convert our response to Fastify format
+      if (response && typeof response === 'object') {
+        if (response.status) {
+          reply.code(response.status);
+        }
+        if (response.headers) {
+          Object.entries(response.headers).forEach(([key, value]) => {
+            reply.header(key, value);
+          });
+        }
+        return response.body ? response.body : response;
+      } else {
+        return response;
+      }
+    } catch (error) {
+      console.error('Handler error:', error);
+      reply.code(500);
+      return {
+        successful: false,
+        errors: [extractErrorMessage(error)]
+      };
+    }
+  };
+}
+
+// Helper function for creating Koa handlers
+export function createKoaHandler(handler: RequestHandler) {
+  return async (ctx: any) => {
+    try {
+      // Convert Koa context to our standard format
+      const request = {
+        method: ctx.method,
+        headers: ctx.headers,
+        body: JSON.stringify(ctx.request.body),
+        url: ctx.url,
+        json: () => Promise.resolve(ctx.request.body)
+      };
+
+      const response = await handler(request);
+      
+      // Convert our response to Koa format
+      if (response && typeof response === 'object') {
+        if (response.status) {
+          ctx.status = response.status;
+        }
+        if (response.headers) {
+          Object.entries(response.headers).forEach(([key, value]) => {
+            ctx.set(key, value);
+          });
+        }
+        ctx.body = response.body ? response.body : response;
+      } else {
+        ctx.body = response;
+      }
+    } catch (error) {
+      console.error('Handler error:', error);
+      ctx.status = 500;
+      ctx.body = {
+        successful: false,
+        errors: [extractErrorMessage(error)]
+      };
+    }
+  };
+}
+
+// Helper function to create AWS Lambda handlers
+export function createLambdaHandler(handler: RequestHandler) {
+  return async (event: any, context: any) => {
+    try {
+      // Convert Lambda event to our standard format
+      const request = {
+        method: event.httpMethod || event.requestContext?.http?.method,
+        headers: event.headers || {},
+        body: event.body,
+        url: event.path || event.rawPath,
+        json: () => Promise.resolve(event.body ? JSON.parse(event.body) : null)
+      };
+
+      const response = await handler(request);
+      
+      // Convert our response to Lambda format
+      return {
+        statusCode: response.status || 200,
+        headers: response.headers || {},
+        body: response.body || JSON.stringify(response)
+      };
+    } catch (error) {
+      console.error('Handler error:', error);
+      return {
+        statusCode: 500,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          successful: false,
+          errors: [extractErrorMessage(error)]
+        })
+      };
+    }
+  };
+}
+
+// Convenience export for common server frameworks
+export const frameworks = {
+  express: createExpressHandler,
+  fastify: createFastifyHandler,
+  koa: createKoaHandler,
+  http: createHttpHandler,
+  lambda: createLambdaHandler,
+  nextjs: getRouteHandlers
+};
+
+// Environment detection utility
+export function detectEnvironment(): string {
+  if (typeof window !== 'undefined') {
+    return 'browser';
+  }
+  
+  if (isNextJSAvailable()) {
+    return 'nextjs';
+  }
+  
+  if (process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return 'lambda';
+  }
+  
+  if (process.env.VERCEL) {
+    return 'vercel';
+  }
+  
+  if (process.env.NETLIFY) {
+    return 'netlify';
+  }
+  
+  return 'nodejs';
+}
+
+// Configuration helper
+export function createServerConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
+  return {
+    fatZebra: {
+      username: process.env.FATZEBRA_USERNAME || '',
+      token: process.env.FATZEBRA_TOKEN || '',
+      sandbox: process.env.NODE_ENV !== 'production',
+      sharedSecret: process.env.FATZEBRA_SHARED_SECRET,
+      timeout: 30000,
+      ...overrides.fatZebra
+    },
+    webhook: {
+      verifySignature: true,
+      enableLogging: process.env.NODE_ENV !== 'production',
+      ...overrides.webhook
+    },
+    cors: {
+      origins: ['http://localhost:3000'],
+      methods: ['GET', 'POST'],
+      headers: ['Content-Type', 'Authorization'],
+      ...overrides.cors
     }
   };
 }

@@ -1,436 +1,464 @@
 /**
- * Standalone server routes that work without Next.js dependency
+ * Standalone route handlers that work without Next.js
+ * These handlers can be used with Express, Koa, or any HTTP server
  */
 
-import { createFatZebraClient } from '../lib/client';
-import { generateVerificationHash, extractErrorMessage } from '../utils';
-import type {
-  PurchaseRequest,
+import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../lib/client';
+import { generateVerificationHash, extractErrorMessage, extractErrorDetails } from '../utils';
+import type { 
+  PurchaseRequest, 
   AuthorizationRequest,
   RefundRequest,
   TokenizationRequest,
-  VerificationHashData,
+  WebhookEvent 
 } from '../types';
-import { FatZebraError } from '../types';
 import { 
   createResponse, 
   extractRequestData, 
-  getClientIP,
-  type RequestHandler 
+  getClientIP, 
+  type StandaloneRequest, 
+  type StandaloneResponse 
 } from './types';
 
-/**
- * Purchase transaction handler - works in any environment
- */
-export const handlePurchase: RequestHandler = async (request) => {
-  try {
-    const { method, body, headers } = await extractRequestData(request);
-    
-    if (method !== 'POST') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
-    }
-
-    if (!body?.amount || !body?.card_number || !body?.card_expiry || !body?.cvv || !body?.card_holder) {
-      return createResponse(
-        { successful: false, errors: ['Missing required payment fields'] },
-        400
-      );
-    }
-
-    const customerIp = getClientIP(request);
-    const client = createFatZebraClient({
-      username: process.env.FATZEBRA_USERNAME!,
-      token: process.env.FATZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-    });
-
-    const purchaseData: PurchaseRequest = {
-      amount: Math.round(body.amount * 100),
-      currency: body.currency || 'AUD',
-      reference: body.reference || `TXN-${Date.now()}`,
-      card_holder: body.card_holder,
-      card_number: body.card_number.replace(/\s/g, ''),
-      card_expiry: body.card_expiry,
-      cvv: body.cvv,
-      customer_ip: customerIp,
-      ...(body.customer && { customer: body.customer }),
-      ...(body.metadata && { metadata: body.metadata }),
-    };
-
-    const response = await client.purchase(purchaseData);
-    return createResponse(response);
-  } catch (error) {
-    console.error('Purchase error:', error);
-    const errorMessage = extractErrorMessage(error);
-    const statusCode = error instanceof FatZebraError ? 400 : 500;
-
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      statusCode
-    );
-  }
-};
+// Runtime configuration for serverless functions
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 /**
- * Authorization transaction handler
+ * Health check endpoint
  */
-export const handleAuthorization: RequestHandler = async (request) => {
-  try {
-    const { method, body } = await extractRequestData(request);
-    
-    if (method !== 'POST') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
-    }
-
-    const customerIp = getClientIP(request);
-    const client = createFatZebraClient({
-      username: process.env.FATZEBRA_USERNAME!,
-      token: process.env.FATZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-    });
-
-    const authData: AuthorizationRequest = {
-      ...body,
-      amount: Math.round(body.amount * 100),
-      customer_ip: customerIp,
-      capture: false,
-    };
-
-    const response = await client.authorize(authData);
-    return createResponse(response);
-  } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      error instanceof FatZebraError ? 400 : 500
-    );
-  }
-};
-
-/**
- * Capture transaction handler
- */
-export const handleCapture: RequestHandler = async (request) => {
-  try {
-    const { method, body } = await extractRequestData(request);
-    
-    if (method !== 'POST') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
-    }
-
-    if (!body?.transactionId) {
-      return createResponse(
-        { successful: false, errors: ['Transaction ID is required'] },
-        400
-      );
-    }
-
-    const client = createFatZebraClient({
-      username: process.env.FATZEBRA_USERNAME!,
-      token: process.env.FATZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-    });
-
-    const response = await client.capture(body.transactionId, body.amount);
-    return createResponse(response);
-  } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      error instanceof FatZebraError ? 400 : 500
-    );
-  }
-};
-
-/**
- * Refund transaction handler
- */
-export const handleRefund: RequestHandler = async (request) => {
-  try {
-    const { method, body } = await extractRequestData(request);
-    
-    if (method !== 'POST') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
-    }
-
-    if (!body?.transaction_id) {
-      return createResponse(
-        { successful: false, errors: ['Transaction ID is required'] },
-        400
-      );
-    }
-
-    const client = createFatZebraClient({
-      username: process.env.FATZEBRA_USERNAME!,
-      token: process.env.FATZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-    });
-
-    const response = await client.refund(body as RefundRequest);
-    return createResponse(response);
-  } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      error instanceof FatZebraError ? 400 : 500
-    );
-  }
-};
-
-/**
- * Tokenization handler
- */
-export const handleTokenization: RequestHandler = async (request) => {
-  try {
-    const { method, body } = await extractRequestData(request);
-    
-    if (method !== 'POST') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
-    }
-
-    if (!body?.card_number || !body?.card_expiry || !body?.card_holder) {
-      return createResponse(
-        { successful: false, errors: ['Missing required card fields'] },
-        400
-      );
-    }
-
-    const client = createFatZebraClient({
-      username: process.env.FATZEBRA_USERNAME!,
-      token: process.env.FATZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-    });
-
-    const response = await client.tokenize(body as TokenizationRequest);
-    return createResponse(response);
-  } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      error instanceof FatZebraError ? 400 : 500
-    );
-  }
-};
-
-/**
- * Void transaction handler
- */
-export const handleVoid: RequestHandler = async (request) => {
-  try {
-    const { method, body } = await extractRequestData(request);
-    
-    if (method !== 'POST') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
-    }
-
-    if (!body?.transactionId) {
-      return createResponse(
-        { successful: false, errors: ['Transaction ID is required'] },
-        400
-      );
-    }
-
-    const client = createFatZebraClient({
-      username: process.env.FATZEBRA_USERNAME!,
-      token: process.env.FATZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-    });
-
-    const response = await client.void(body.transactionId);
-    return createResponse(response);
-  } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      error instanceof FatZebraError ? 400 : 500
-    );
-  }
-};
-
-/**
- * Transaction status handler
- */
-export const handleTransactionStatus: RequestHandler = async (request) => {
-  try {
-    const { method, url } = await extractRequestData(request);
-    
-    if (method !== 'GET') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
-    }
-
-    const urlObj = new URL(url, 'http://localhost');
-    const transactionId = urlObj.searchParams.get('id');
-
-    if (!transactionId) {
-      return createResponse(
-        { successful: false, errors: ['Transaction ID is required'] },
-        400
-      );
-    }
-
-    const client = createFatZebraClient({
-      username: process.env.FATZEBRA_USERNAME!,
-      token: process.env.FATZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-    });
-
-    const response = await client.getTransaction(transactionId);
-    return createResponse(response);
-  } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      error instanceof FatZebraError ? 400 : 500
-    );
-  }
-};
-
-/**
- * Generate verification hash handler
- */
-export const handleGenerateHash: RequestHandler = async (request) => {
-  try {
-    const { method, body } = await extractRequestData(request);
-    
-    if (method !== 'POST') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
-    }
-
-    const { amount, currency, reference, timestamp, card_token } = body;
-
-    if (!amount || !currency || !reference || !timestamp) {
-      return createResponse(
-        { successful: false, errors: ['Missing required fields for hash generation'] },
-        400
-      );
-    }
-
-    const sharedSecret = process.env.FATZEBRA_SHARED_SECRET;
-    if (!sharedSecret) {
-      return createResponse(
-        { successful: false, errors: ['Shared secret not configured'] },
-        500
-      );
-    }
-
-    const hashData: VerificationHashData = {
-      amount,
-      currency,
-      reference,
-      timestamp,
-      ...(card_token && { card_token }),
-    };
-
-    const hash = generateVerificationHash(hashData, sharedSecret);
-
-    return createResponse({
-      successful: true,
-      hash,
-      timestamp,
-    });
-  } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      500
-    );
-  }
-};
-
-/**
- * Health check handler
- */
-export const handleHealthCheck: RequestHandler = async (request) => {
+export async function handleHealthCheck(request: StandaloneRequest): Promise<StandaloneResponse> {
   try {
     const { method } = await extractRequestData(request);
     
     if (method !== 'GET') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
+      return createResponse({ error: 'Method not allowed' }, 405);
     }
 
     return createResponse({
-      status: 'healthy',
-      service: 'fat-zebra-nextjs',
-      version: '7',
+      status: 'ok',
       timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
+      version: process.env.npm_package_version || '0.3.8',
+      mode: 'standalone'
     });
   } catch (error) {
-    return createResponse(
-      { status: 'unhealthy', error: extractErrorMessage(error) },
-      500
-    );
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
   }
-};
+}
 
 /**
- * Webhook signature verification (placeholder - implement based on your needs)
+ * Process a purchase transaction
  */
-export const handleVerifyWebhook: RequestHandler = async (request) => {
+export async function handlePurchase(request: StandaloneRequest): Promise<StandaloneResponse> {
+  try {
+    const { method, body } = await extractRequestData(request);
+    
+    if (method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
+    }
+
+    const { purchaseData, config } = body;
+
+    if (!purchaseData || !config) {
+      return createResponse({
+        successful: false,
+        errors: ['purchaseData and config are required']
+      }, 400);
+    }
+
+    const client = createFatZebraClient(config);
+    const result = await client.purchase(purchaseData as PurchaseRequest);
+    
+    return createResponse(result);
+  } catch (error) {
+    if (error instanceof FatZebraError) {
+      return createResponse({
+        successful: false,
+        errors: error.errors,
+        response: error.response
+      }, 400);
+    }
+
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
+  }
+}
+
+/**
+ * Process an authorization transaction
+ */
+export async function handleAuthorization(request: StandaloneRequest): Promise<StandaloneResponse> {
+  try {
+    const { method, body } = await extractRequestData(request);
+    
+    if (method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
+    }
+
+    const { authData, config } = body;
+
+    if (!authData || !config) {
+      return createResponse({
+        successful: false,
+        errors: ['authData and config are required']
+      }, 400);
+    }
+
+    const client = createFatZebraClient(config);
+    const result = await client.authorize(authData as AuthorizationRequest);
+    
+    return createResponse(result);
+  } catch (error) {
+    if (error instanceof FatZebraError) {
+      return createResponse({
+        successful: false,
+        errors: error.errors,
+        response: error.response
+      }, 400);
+    }
+
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
+  }
+}
+
+/**
+ * Capture a previously authorized transaction
+ */
+export async function handleCapture(request: StandaloneRequest): Promise<StandaloneResponse> {
+  try {
+    const { method, body } = await extractRequestData(request);
+    
+    if (method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
+    }
+
+    const { transactionId, amount, config } = body;
+
+    if (!transactionId || !config) {
+      return createResponse({
+        successful: false,
+        errors: ['transactionId and config are required']
+      }, 400);
+    }
+
+    const client = createFatZebraClient(config);
+    const result = await client.capture(transactionId, amount);
+    
+    return createResponse(result);
+  } catch (error) {
+    if (error instanceof FatZebraError) {
+      return createResponse({
+        successful: false,
+        errors: error.errors,
+        response: error.response
+      }, 400);
+    }
+
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
+  }
+}
+
+/**
+ * Process a refund transaction
+ */
+export async function handleRefund(request: StandaloneRequest): Promise<StandaloneResponse> {
+  try {
+    const { method, body } = await extractRequestData(request);
+    
+    if (method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
+    }
+
+    const { refundData, config } = body;
+
+    if (!refundData || !config) {
+      return createResponse({
+        successful: false,
+        errors: ['refundData and config are required']
+      }, 400);
+    }
+
+    const client = createFatZebraClient(config);
+    const result = await client.refund(refundData as RefundRequest);
+    
+    return createResponse(result);
+  } catch (error) {
+    if (error instanceof FatZebraError) {
+      return createResponse({
+        successful: false,
+        errors: error.errors,
+        response: error.response
+      }, 400);
+    }
+
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
+  }
+}
+
+/**
+ * Tokenize card details
+ */
+export async function handleTokenization(request: StandaloneRequest): Promise<StandaloneResponse> {
+  try {
+    const { method, body } = await extractRequestData(request);
+    
+    if (method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
+    }
+
+    const { tokenData, config } = body;
+
+    if (!tokenData || !config) {
+      return createResponse({
+        successful: false,
+        errors: ['tokenData and config are required']
+      }, 400);
+    }
+
+    const client = createFatZebraClient(config);
+    const result = await client.tokenize(tokenData as TokenizationRequest);
+    
+    return createResponse(result);
+  } catch (error) {
+    if (error instanceof FatZebraError) {
+      return createResponse({
+        successful: false,
+        errors: error.errors,
+        response: error.response
+      }, 400);
+    }
+
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
+  }
+}
+
+/**
+ * Void a transaction
+ */
+export async function handleVoid(request: StandaloneRequest): Promise<StandaloneResponse> {
+  try {
+    const { method, body } = await extractRequestData(request);
+    
+    if (method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
+    }
+
+    const { transactionId, config } = body;
+
+    if (!transactionId || !config) {
+      return createResponse({
+        successful: false,
+        errors: ['transactionId and config are required']
+      }, 400);
+    }
+
+    const client = createFatZebraClient(config);
+    const result = await client.void(transactionId);
+    
+    return createResponse(result);
+  } catch (error) {
+    if (error instanceof FatZebraError) {
+      return createResponse({
+        successful: false,
+        errors: error.errors,
+        response: error.response
+      }, 400);
+    }
+
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
+  }
+}
+
+/**
+ * Get transaction status
+ */
+export async function handleTransactionStatus(request: StandaloneRequest): Promise<StandaloneResponse> {
+  try {
+    const { method, body } = await extractRequestData(request);
+    
+    if (method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
+    }
+
+    const { transactionId, config } = body;
+
+    if (!transactionId || !config) {
+      return createResponse({
+        successful: false,
+        errors: ['transactionId and config are required']
+      }, 400);
+    }
+
+    const client = createFatZebraClient(config);
+    const result = await client.getTransaction(transactionId);
+    
+    return createResponse(result);
+  } catch (error) {
+    if (error instanceof FatZebraError) {
+      return createResponse({
+        successful: false,
+        errors: error.errors,
+        response: error.response
+      }, 400);
+    }
+
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
+  }
+}
+
+/**
+ * Verify webhook signature
+ */
+export async function handleVerifyWebhook(request: StandaloneRequest): Promise<StandaloneResponse> {
   try {
     const { method, body, headers } = await extractRequestData(request);
     
     if (method !== 'POST') {
-      return createResponse(
-        { successful: false, errors: ['Method not allowed'] },
-        405
-      );
+      return createResponse({ error: 'Method not allowed' }, 405);
     }
 
-    // Extract signature from headers
-    const signature = headers['x-fatzebra-signature'] || headers['X-FatZebra-Signature'];
-    
-    if (!signature) {
-      return createResponse(
-        { successful: false, errors: ['Missing webhook signature'] },
-        400
-      );
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
     }
 
-    // TODO: Implement actual webhook signature verification
-    // This is a placeholder - implement according to Fat Zebra's webhook documentation
-    
+    const { payload, sharedSecret } = body;
+    const signature = headers['x-fatzebra-signature'] || headers['x-fatzebra-hmac'];
+
+    if (!payload || !sharedSecret || !signature) {
+      return createResponse({
+        successful: false,
+        errors: ['payload, sharedSecret, and signature are required']
+      }, 400);
+    }
+
+    const expectedHash = generateVerificationHash(payload, sharedSecret);
+    const isValid = expectedHash === signature;
+
     return createResponse({
       successful: true,
-      verified: true,
-      event: body,
+      verified: isValid,
+      payload: isValid ? payload : null
     });
   } catch (error) {
-    const errorMessage = extractErrorMessage(error);
-    return createResponse(
-      { successful: false, errors: [errorMessage] },
-      500
-    );
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
   }
-};
+}
 
-// Export configuration for runtime detection
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+/**
+ * Generate verification hash
+ */
+export async function handleGenerateHash(request: StandaloneRequest): Promise<StandaloneResponse> {
+  try {
+    const { method, body } = await extractRequestData(request);
+    
+    if (method !== 'POST') {
+      return createResponse({ error: 'Method not allowed' }, 405);
+    }
+
+    if (!body) {
+      return createResponse({
+        successful: false,
+        errors: ['Request body is required']
+      }, 400);
+    }
+
+    const { data, sharedSecret } = body;
+
+    if (!data || !sharedSecret) {
+      return createResponse({
+        successful: false,
+        errors: ['data and sharedSecret are required']
+      }, 400);
+    }
+
+    const hash = generateVerificationHash(data, sharedSecret);
+
+    return createResponse({
+      successful: true,
+      hash
+    });
+  } catch (error) {
+    return createResponse({
+      successful: false,
+      errors: [extractErrorMessage(error)]
+    }, 500);
+  }
+}
