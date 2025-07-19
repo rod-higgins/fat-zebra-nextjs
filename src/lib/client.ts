@@ -1,144 +1,136 @@
-import { createHmac } from 'crypto';
-import type { 
-  FatZebraConfig, 
-  OAuthConfig,
-  FatZebraResponse, 
-  TransactionResponse, 
-  TokenResponse,
+import {
+  FatZebraConfig,
   PurchaseRequest,
   AuthorizationRequest,
-  CaptureRequest,
   RefundRequest,
-  TokenizeRequest,
-  WalletRequest,
-  FatZebraError
+  TokenizationRequest,
+  FatZebraResponse,
+  TransactionResponse,
+  TokenizationResponse,
+  OAuthConfig,
+  VerificationHashData,
+  WebhookEvent,
+  SettlementResponse
 } from '../types';
+import { createHmac } from 'crypto';
+
+export class FatZebraError extends Error {
+  public errors: string[];
+  public code?: string;
+
+  constructor(message: string, errors: string[] = [], code?: string) {
+    super(message);
+    this.name = 'FatZebraError';
+    this.errors = errors;
+    this.code = code;
+  }
+}
 
 export class FatZebraClient {
-  private config: FatZebraConfig;
+  private username: string;
+  private token: string;
   private baseUrl: string;
-  private oauthBaseUrl: string;
+  private sharedSecret?: string;
 
   constructor(config: FatZebraConfig) {
-    this.config = config;
-    this.baseUrl = config.baseUrl || 
-      (config.isTestMode ? 'https://gateway.pmnts-sandbox.io' : 'https://gateway.pmnts.io');
-    this.oauthBaseUrl = config.isTestMode 
-      ? 'https://auth.sandbox.fatzebra.com' 
-      : 'https://auth.fatzebra.com';
-  }
-
-  private getAuthHeader(): string {
-    const credentials = btoa(`${this.config.username}:${this.config.token}`);
-    return `Basic ${credentials}`;
-  }
-
-  /**
-   * Generate OAuth access token for client-side SDK usage
-   */
-  async generateAccessToken(oauthConfig: OAuthConfig): Promise<string> {
-    const url = `${this.oauthBaseUrl}/oauth/token`;
+    this.username = config.username;
+    this.token = config.token;
+    this.sharedSecret = config.sharedSecret;
     
-    const data = {
-      grant_type: 'client_credentials',
-      client_id: oauthConfig.clientId,
-      client_secret: oauthConfig.clientSecret,
-      scope: oauthConfig.scope || 'payments:create'
+    // Set base URL based on test mode
+    if (config.baseUrl) {
+      this.baseUrl = config.baseUrl;
+    } else {
+      this.baseUrl = config.isTestMode !== false 
+        ? 'https://gateway.pmnts-sandbox.io'
+        : 'https://gateway.pmnts.io';
+    }
+  }
+
+  private getAuthHeaders(): Record<string, string> {
+    const credentials = btoa(`${this.username}:${this.token}`);
+    return {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/json',
+      'User-Agent': '@fwc/fat-zebra-nextjs/0.2.0'
     };
-
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams(data)
-      });
-
-      if (!response.ok) {
-        throw new Error(`OAuth token request failed: ${response.status} ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      return result.access_token;
-    } catch (error) {
-      throw new FatZebraError(
-        'Failed to generate access token',
-        [error instanceof Error ? error.message : 'Unknown error']
-      );
-    }
-  }
-
-  /**
-   * Generate verification hash for secure operations
-   */
-  generateVerificationHash(data: string): string {
-    if (!this.config.sharedSecret) {
-      throw new FatZebraError('Shared secret is required for verification hash generation');
-    }
-    
-    return createHmac('md5', this.config.sharedSecret)
-      .update(data)
-      .digest('hex');
-  }
-
-  /**
-   * Generate verification hash for new card tokenization
-   */
-  generateNewCardVerificationHash(reference: string, amount: number, currency: string): string {
-    return this.generateVerificationHash(`${reference}:${amount}${currency}`);
-  }
-
-  /**
-   * Generate verification hash for existing card verification
-   */
-  generateExistingCardVerificationHash(cardToken: string): string {
-    return this.generateVerificationHash(cardToken);
   }
 
   private async makeRequest<T>(
-    endpoint: string,
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
+    endpoint: string, 
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'POST', 
     data?: any
   ): Promise<FatZebraResponse<T>> {
-    const url = `${this.baseUrl}/v1.0${endpoint}`;
+    const url = `${this.baseUrl}/v1.0/${endpoint}`;
     
-    const headers: HeadersInit = {
-      'Authorization': this.getAuthHeader(),
-      'Content-Type': 'application/json',
-      'User-Agent': 'FatZebra-NextJS-Library/2.0.0',
-      'X-Test-Mode': this.config.isTestMode ? 'true' : 'false'
-    };
-
-    const options: RequestInit = {
+    const requestOptions: RequestInit = {
       method,
-      headers,
+      headers: this.getAuthHeaders(),
     };
 
-    if (data && method !== 'GET') {
-      options.body = JSON.stringify(data);
+    if (data && (method === 'POST' || method === 'PUT')) {
+      requestOptions.body = JSON.stringify(data);
     }
 
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(url, requestOptions);
+      const result = await response.json();
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ errors: [`HTTP ${response.status}: ${response.statusText}`] }));
         throw new FatZebraError(
-          `API request failed`,
-          errorData.errors || [`HTTP ${response.status}: ${response.statusText}`],
-          errorData
+          result.message || 'Request failed',
+          result.errors || [],
+          response.status.toString()
         );
       }
 
-      const result = await response.json();
-      return result as FatZebraResponse<T>;
+      return result;
     } catch (error) {
       if (error instanceof FatZebraError) {
         throw error;
       }
       throw new FatZebraError(
-        'Fat Zebra API request failed',
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+    }
+  }
+
+  // OAuth Methods
+  async generateAccessToken(config: OAuthConfig): Promise<{ access_token: string; expires_in: number }> {
+    const tokenUrl = `${this.baseUrl}/oauth/token`;
+    
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      scope: config.scope || 'api'
+    });
+
+    try {
+      const response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': '@fwc/fat-zebra-nextjs/0.2.0'
+        },
+        body: body.toString()
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new FatZebraError(
+          'OAuth token generation failed',
+          [error.error_description || error.error || 'Unknown OAuth error']
+        );
+      }
+
+      return await response.json();
+    } catch (error) {
+      if (error instanceof FatZebraError) {
+        throw error;
+      }
+      throw new FatZebraError(
+        'OAuth token generation failed',
         [error instanceof Error ? error.message : 'Unknown error']
       );
     }
@@ -146,11 +138,7 @@ export class FatZebraClient {
 
   // Purchase Methods
   async createPurchase(request: PurchaseRequest): Promise<FatZebraResponse<TransactionResponse>> {
-    const enrichedRequest = {
-      ...request,
-      test: this.config.isTestMode || false
-    };
-    return this.makeRequest<TransactionResponse>('/purchases', 'POST', enrichedRequest);
+    return this.makeRequest<TransactionResponse>('purchases', 'POST', request);
   }
 
   async createPurchaseWithToken(
@@ -161,163 +149,136 @@ export class FatZebraClient {
     customerIp?: string,
     extra?: any
   ): Promise<FatZebraResponse<TransactionResponse>> {
-    const request = {
+    const purchaseData: PurchaseRequest = {
       card_token: cardToken,
       amount,
       reference,
       currency,
       customer_ip: customerIp,
-      extra,
-      test: this.config.isTestMode || false
+      extra
     };
-    
-    return this.makeRequest<TransactionResponse>('/purchases', 'POST', request);
-  }
 
-  async createPurchaseWithWallet(request: WalletRequest): Promise<FatZebraResponse<TransactionResponse>> {
-    const enrichedRequest = {
-      ...request,
-      test: this.config.isTestMode || false
-    };
-    return this.makeRequest<TransactionResponse>('/purchases', 'POST', enrichedRequest);
+    return this.createPurchase(purchaseData);
   }
 
   async getPurchase(purchaseId: string): Promise<FatZebraResponse<TransactionResponse>> {
-    return this.makeRequest<TransactionResponse>(`/purchases/${purchaseId}`);
-  }
-
-  async listPurchases(
-    from?: string,
-    to?: string,
-    limit?: number,
-    offset?: number
-  ): Promise<FatZebraResponse<TransactionResponse[]>> {
-    const params = new URLSearchParams();
-    if (from) params.append('from', from);
-    if (to) params.append('to', to);
-    if (limit) params.append('limit', limit.toString());
-    if (offset) params.append('offset', offset.toString());
-    
-    const queryString = params.toString();
-    const endpoint = queryString ? `/purchases?${queryString}` : '/purchases';
-    
-    return this.makeRequest<TransactionResponse[]>(endpoint);
+    return this.makeRequest<TransactionResponse>(`purchases/${purchaseId}`, 'GET');
   }
 
   // Authorization Methods
   async createAuthorization(request: AuthorizationRequest): Promise<FatZebraResponse<TransactionResponse>> {
-    const enrichedRequest = {
+    return this.makeRequest<TransactionResponse>('purchases', 'POST', {
       ...request,
-      capture: false,
-      test: this.config.isTestMode || false
-    };
-    return this.makeRequest<TransactionResponse>('/purchases', 'POST', enrichedRequest);
+      capture: false
+    });
   }
 
-  async captureAuthorization(authId: string, amount?: number): Promise<FatZebraResponse<TransactionResponse>> {
-    const request: CaptureRequest = {
-      transaction_id: authId,
-      ...(amount && { amount })
-    };
-    return this.makeRequest<TransactionResponse>('/purchases/capture', 'POST', request);
+  async captureAuthorization(
+    authorizationId: string,
+    amount?: number
+  ): Promise<FatZebraResponse<TransactionResponse>> {
+    const captureData = amount ? { amount } : {};
+    return this.makeRequest<TransactionResponse>(`purchases/${authorizationId}/capture`, 'POST', captureData);
   }
 
-  async voidAuthorization(authId: string): Promise<FatZebraResponse<TransactionResponse>> {
-    return this.makeRequest<TransactionResponse>(`/purchases/${authId}/void`, 'POST');
+  async voidAuthorization(authorizationId: string): Promise<FatZebraResponse<TransactionResponse>> {
+    return this.makeRequest<TransactionResponse>(`purchases/${authorizationId}/void`, 'POST');
   }
 
   // Refund Methods
   async createRefund(request: RefundRequest): Promise<FatZebraResponse<TransactionResponse>> {
-    const enrichedRequest = {
-      ...request,
-      test: this.config.isTestMode || false
-    };
-    return this.makeRequest<TransactionResponse>('/refunds', 'POST', enrichedRequest);
+    return this.makeRequest<TransactionResponse>('refunds', 'POST', request);
   }
 
   async getRefund(refundId: string): Promise<FatZebraResponse<TransactionResponse>> {
-    return this.makeRequest<TransactionResponse>(`/refunds/${refundId}`);
+    return this.makeRequest<TransactionResponse>(`refunds/${refundId}`, 'GET');
   }
 
   // Tokenization Methods
-  async createToken(request: TokenizeRequest): Promise<FatZebraResponse<TokenResponse>> {
-    const enrichedRequest = {
-      ...request,
-      test: this.config.isTestMode || false
-    };
-    return this.makeRequest<TokenResponse>('/credit_cards', 'POST', enrichedRequest);
+  async createToken(request: TokenizationRequest): Promise<FatZebraResponse<TokenizationResponse>> {
+    return this.makeRequest<TokenizationResponse>('credit_cards', 'POST', request);
   }
 
-  async getToken(tokenId: string): Promise<FatZebraResponse<TokenResponse>> {
-    return this.makeRequest<TokenResponse>(`/credit_cards/${tokenId}`);
+  async getToken(tokenId: string): Promise<FatZebraResponse<TokenizationResponse>> {
+    return this.makeRequest<TokenizationResponse>(`credit_cards/${tokenId}`, 'GET');
   }
 
-  // Bank Account Methods (Direct Debit)
-  async createDirectDebit(request: {
-    amount: number;
-    reference: string;
-    bsb: string;
-    account_number: string;
-    account_name: string;
-    description?: string;
-  }): Promise<FatZebraResponse<TransactionResponse>> {
-    const enrichedRequest = {
-      ...request,
-      test: this.config.isTestMode || false
-    };
-    return this.makeRequest<TransactionResponse>('/direct_debits', 'POST', enrichedRequest);
+  // Verification Hash Generation
+  generateVerificationHash(data: VerificationHashData): string {
+    if (!this.sharedSecret) {
+      throw new FatZebraError('Shared secret is required for verification hash generation');
+    }
+
+    const timestamp = data.timestamp || Math.floor(Date.now() / 1000);
+    const hashString = `${data.reference}${data.amount}${data.currency}${timestamp}`;
+    
+    return createHmac('sha256', this.sharedSecret)
+      .update(hashString)
+      .digest('hex');
+  }
+
+  // Webhook Verification
+  verifyWebhookSignature(payload: string, signature: string): boolean {
+    if (!this.sharedSecret) {
+      throw new FatZebraError('Shared secret is required for webhook verification');
+    }
+
+    const expectedSignature = createHmac('sha256', this.sharedSecret)
+      .update(payload)
+      .digest('hex');
+
+    return expectedSignature === signature;
   }
 
   // Settlement Methods
-  async getSettlements(
-    from?: string,
-    to?: string
-  ): Promise<FatZebraResponse<any[]>> {
-    const params = new URLSearchParams();
-    if (from) params.append('from', from);
-    if (to) params.append('to', to);
-    
-    const queryString = params.toString();
-    const endpoint = queryString ? `/settlements?${queryString}` : '/settlements';
-    
-    return this.makeRequest<any[]>(endpoint);
+  async getSettlements(date?: string): Promise<FatZebraResponse<SettlementResponse[]>> {
+    const endpoint = date ? `settlements?date=${date}` : 'settlements';
+    return this.makeRequest<SettlementResponse[]>(endpoint, 'GET');
+  }
+
+  async getSettlement(settlementId: string): Promise<FatZebraResponse<SettlementResponse>> {
+    return this.makeRequest<SettlementResponse>(`settlements/${settlementId}`, 'GET');
+  }
+
+  // Batch Processing
+  async processBatch(requests: any[], batchReference: string): Promise<FatZebraResponse<any>> {
+    return this.makeRequest('batch', 'POST', {
+      requests,
+      batch_reference: batchReference
+    });
   }
 
   // Health Check
-  async ping(): Promise<FatZebraResponse<{ ping: string }>> {
-    return this.makeRequest<{ ping: string }>('/ping');
-  }
-
-  // Webhooks verification
-  verifyWebhookSignature(payload: string, signature: string): boolean {
-    if (!this.config.sharedSecret) {
-      throw new FatZebraError('Shared secret is required for webhook verification');
-    }
-    
-    const expectedSignature = createHmac('sha256', this.config.sharedSecret)
-      .update(payload)
-      .digest('hex');
-    
-    return expectedSignature === signature;
+  async ping(): Promise<FatZebraResponse<{ message: string }>> {
+    return this.makeRequest<{ message: string }>('ping', 'GET');
   }
 }
 
-/**
- * Factory function to create a FatZebra client instance
- */
+// Factory function for creating client instances
 export function createFatZebraClient(config: FatZebraConfig): FatZebraClient {
   return new FatZebraClient(config);
 }
 
-/**
- * Helper function to validate Fat Zebra configuration
- */
-export function validateConfig(config: Partial<FatZebraConfig>): config is FatZebraConfig {
-  if (!config.username) {
-    throw new FatZebraError('Username is required in FatZebra configuration');
+// Response handler utility
+export function handleFatZebraResponse<T>(response: FatZebraResponse<T>): T {
+  if (!response.successful) {
+    throw new FatZebraError(
+      'Transaction failed',
+      response.errors || ['Unknown error']
+    );
   }
-  if (!config.token) {
-    throw new FatZebraError('Token is required in FatZebra configuration');
-  }
-  return true;
+
+  return response.response;
 }
+
+// Test card constants
+export const TEST_CARDS = {
+  VISA_SUCCESS: '4005550000000001',
+  VISA_3DS_SUCCESS: '4005554444444460',
+  VISA_DECLINE: '4005550000000019',
+  MASTERCARD_SUCCESS: '5123456789012346',
+  MASTERCARD_3DS_SUCCESS: '5123456789012353',
+  MASTERCARD_DECLINE: '5123456789012353',
+  AMEX_SUCCESS: '345678901234564',
+  AMEX_DECLINE: '345678901234572'
+} as const;

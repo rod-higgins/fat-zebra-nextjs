@@ -1,56 +1,43 @@
-import { createHmac } from 'crypto';
-import type { 
-  CardValidationResult, 
-  CardType, 
-  Currency,
-  VerificationHashData,
-  FatZebraResponse 
-} from '../types';
-import { CARD_TYPES, TEST_CARDS, ERROR_CODES } from '../types';
+import { CardValidationResult } from '../types';
 
-/**
- * Card validation utilities
- */
+// Card validation patterns
+const CARD_PATTERNS = {
+  visa: /^4[0-9]{12}(?:[0-9]{3})?$/,
+  mastercard: /^5[1-5][0-9]{14}$/,
+  amex: /^3[47][0-9]{13}$/,
+  discover: /^6(?:011|5[0-9]{2})[0-9]{12}$/,
+  diners: /^3[0689][0-9]{11}$/,
+  jcb: /^(?:2131|1800|35\d{3})\d{11}$/,
+  unionpay: /^(62|88)\d{14,17}$/
+};
 
-export function validateCard(cardNumber: string): CardValidationResult {
-  const cleanNumber = cardNumber.replace(/\D/g, '');
-  const errors: string[] = [];
+// Card type detection based on number
+export function getCardType(cardNumber: string): string {
+  const cleanNumber = cardNumber.replace(/\s/g, '');
   
-  // Check length
-  if (cleanNumber.length < 13 || cleanNumber.length > 19) {
-    errors.push('Card number must be between 13 and 19 digits');
+  for (const [type, pattern] of Object.entries(CARD_PATTERNS)) {
+    if (pattern.test(cleanNumber)) {
+      return type.charAt(0).toUpperCase() + type.slice(1);
+    }
   }
   
-  // Luhn algorithm check
-  if (!isValidLuhn(cleanNumber)) {
-    errors.push('Invalid card number');
-  }
-  
-  const cardType = detectCardType(cleanNumber);
-  
-  // Check specific card type requirements
-  if (cardType === CARD_TYPES.AMEX && cleanNumber.length !== 15) {
-    errors.push('American Express cards must be 15 digits');
-  } else if (cardType === CARD_TYPES.DINERS && ![14, 16].includes(cleanNumber.length)) {
-    errors.push('Diners Club cards must be 14 or 16 digits');
-  } else if ([CARD_TYPES.VISA, CARD_TYPES.MASTERCARD].includes(cardType) && cleanNumber.length !== 16) {
-    errors.push('Visa and MasterCard must be 16 digits');
-  }
-  
-  return {
-    isValid: errors.length === 0,
-    cardType,
-    errors
-  };
+  return 'Unknown';
 }
 
-export function isValidLuhn(cardNumber: string): boolean {
-  const digits = cardNumber.replace(/\D/g, '');
+// Luhn algorithm for card number validation
+export function isValidCardNumber(cardNumber: string): boolean {
+  const cleanNumber = cardNumber.replace(/\s/g, '');
+  
+  if (!/^\d+$/.test(cleanNumber)) {
+    return false;
+  }
+  
   let sum = 0;
   let isEven = false;
   
-  for (let i = digits.length - 1; i >= 0; i--) {
-    let digit = parseInt(digits[i], 10);
+  // Process digits from right to left
+  for (let i = cleanNumber.length - 1; i >= 0; i--) {
+    let digit = parseInt(cleanNumber.charAt(i), 10);
     
     if (isEven) {
       digit *= 2;
@@ -66,497 +53,334 @@ export function isValidLuhn(cardNumber: string): boolean {
   return sum % 10 === 0;
 }
 
-export function detectCardType(cardNumber: string): CardType {
-  const cleanNumber = cardNumber.replace(/\D/g, '');
+// Comprehensive card validation
+export function validateCard(cardNumber: string): CardValidationResult {
+  const cleanNumber = cardNumber.replace(/\s/g, '');
+  const errors: string[] = [];
   
-  // Visa: starts with 4
-  if (/^4/.test(cleanNumber)) {
-    return CARD_TYPES.VISA;
+  // Check if empty
+  if (!cleanNumber) {
+    errors.push('Card number is required');
+    return { isValid: false, cardType: 'Unknown', errors };
   }
   
-  // MasterCard: starts with 5[1-5] or 2[2-7]
-  if (/^5[1-5]/.test(cleanNumber) || /^2[2-7]/.test(cleanNumber)) {
-    return CARD_TYPES.MASTERCARD;
+  // Check if all digits
+  if (!/^\d+$/.test(cleanNumber)) {
+    errors.push('Card number must contain only digits');
+    return { isValid: false, cardType: 'Unknown', errors };
   }
   
-  // American Express: starts with 34 or 37
-  if (/^3[47]/.test(cleanNumber)) {
-    return CARD_TYPES.AMEX;
+  // Check length
+  if (cleanNumber.length < 13 || cleanNumber.length > 19) {
+    errors.push('Card number must be between 13 and 19 digits');
   }
   
-  // Diners Club: starts with 30, 36, 38, or 39
-  if (/^3[0689]/.test(cleanNumber)) {
-    return CARD_TYPES.DINERS;
+  // Get card type
+  const cardType = getCardType(cleanNumber);
+  
+  // Validate specific card type lengths
+  if (cardType === 'Amex' && cleanNumber.length !== 15) {
+    errors.push('American Express card numbers must be 15 digits');
+  } else if (cardType === 'Visa' && ![13, 16, 19].includes(cleanNumber.length)) {
+    errors.push('Visa card numbers must be 13, 16, or 19 digits');
+  } else if (cardType === 'Mastercard' && cleanNumber.length !== 16) {
+    errors.push('Mastercard numbers must be 16 digits');
   }
   
-  // Discover: starts with 6011, 622126-622925, 644-649, or 65
-  if (/^(6011|65|64[4-9]|622(12[6-9]|1[3-9][0-9]|[2-8][0-9]{2}|9[01][0-9]|92[0-5]))/.test(cleanNumber)) {
-    return CARD_TYPES.DISCOVER;
+  // Luhn algorithm validation
+  if (!isValidCardNumber(cleanNumber)) {
+    errors.push('Invalid card number');
   }
   
-  // JCB: starts with 35
-  if (/^35/.test(cleanNumber)) {
-    return CARD_TYPES.JCB;
-  }
-  
-  return CARD_TYPES.UNKNOWN;
-}
-
-/**
- * Card formatting utilities
- */
-
-export function formatCardNumber(cardNumber: string): string {
-  const cleanNumber = cardNumber.replace(/\D/g, '');
-  const cardType = detectCardType(cleanNumber);
-  
-  // Different formatting for different card types
-  switch (cardType) {
-    case CARD_TYPES.AMEX:
-      // Format: 4-6-5
-      return cleanNumber
-        .slice(0, 15)
-        .replace(/(\d{4})(\d{6})(\d{5})/, '$1 $2 $3')
-        .trim();
-    
-    case CARD_TYPES.DINERS:
-      // Format: 4-6-4
-      return cleanNumber
-        .slice(0, 14)
-        .replace(/(\d{4})(\d{6})(\d{4})/, '$1 $2 $3')
-        .trim();
-    
-    default:
-      // Format: 4-4-4-4
-      return cleanNumber
-        .slice(0, 16)
-        .replace(/(\d{4})(?=\d)/g, '$1 ')
-        .trim();
-  }
-}
-
-export function formatCardExpiry(expiry: string): string {
-  const cleaned = expiry.replace(/\D/g, '');
-  
-  if (cleaned.length === 0) {
-    return '';
-  } else if (cleaned.length <= 2) {
-    return cleaned;
-  } else {
-    return `${cleaned.slice(0, 2)}/${cleaned.slice(2, 4)}`;
-  }
-}
-
-export function parseCardExpiry(expiry: string): { month: string; year: string } {
-  const parts = expiry.split('/');
   return {
-    month: parts[0] || '',
-    year: parts[1] || ''
+    isValid: errors.length === 0,
+    cardType,
+    errors
   };
 }
 
-/**
- * Currency and amount utilities
- */
-
-export function formatCurrency(amount: number, currency: Currency = 'AUD'): string {
-  const formatter = new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+// Format card number with spaces
+export function formatCardNumber(cardNumber: string): string {
+  const cleanNumber = cardNumber.replace(/\s/g, '');
+  const cardType = getCardType(cleanNumber);
   
-  return formatter.format(amount);
+  // American Express format: 1234 567890 12345
+  if (cardType === 'Amex') {
+    return cleanNumber.replace(/(\d{4})(\d{6})(\d{5})/, '$1 $2 $3').trim();
+  }
+  
+  // Default format: 1234 5678 9012 3456
+  return cleanNumber.replace(/(\d{4})/g, '$1 ').trim();
 }
 
-export function parseCurrency(currencyString: string): number {
-  const cleaned = currencyString.replace(/[^\d.-]/g, '');
-  return parseFloat(cleaned) || 0;
+// Format expiry date
+export function formatExpiryDate(expiry: string): string {
+  const cleanExpiry = expiry.replace(/\D/g, '');
+  
+  if (cleanExpiry.length >= 2) {
+    return cleanExpiry.replace(/(\d{2})(\d{0,2})/, '$1/$2');
+  }
+  
+  return cleanExpiry;
 }
 
-export function convertCents(amount: number): number {
-  return Math.round(amount * 100);
+// Validate expiry date
+export function isValidExpiryDate(expiry: string): boolean {
+  if (!/^\d{2}\/\d{2}$/.test(expiry)) {
+    return false;
+  }
+  
+  const [month, year] = expiry.split('/').map(Number);
+  
+  // Check month range
+  if (month < 1 || month > 12) {
+    return false;
+  }
+  
+  // Check if not expired
+  const currentDate = new Date();
+  const currentYear = currentDate.getFullYear() % 100;
+  const currentMonth = currentDate.getMonth() + 1;
+  
+  if (year < currentYear || (year === currentYear && month < currentMonth)) {
+    return false;
+  }
+  
+  return true;
 }
 
-export function convertFromCents(amountInCents: number): number {
-  return amountInCents / 100;
+// CVV validation
+export function isValidCVV(cvv: string, cardType?: string): boolean {
+  if (!/^\d+$/.test(cvv)) {
+    return false;
+  }
+  
+  // American Express uses 4 digits, others use 3
+  if (cardType === 'Amex') {
+    return cvv.length === 4;
+  }
+  
+  return cvv.length === 3;
 }
 
-/**
- * Reference generation utilities
- */
+// Format currency amount
+export function formatCurrency(amount: number, currency: string = 'AUD'): string {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency: currency
+  }).format(amount);
+}
 
-export function generateReference(prefix: string = 'ORDER'): string {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+// Generate random reference
+export function generateReference(prefix: string = 'PAY'): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substr(2, 9).toUpperCase();
   return `${prefix}-${timestamp}-${random}`;
 }
 
-export function generateUniqueId(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
-}
-
-export function generateTransactionId(): string {
-  return `TXN-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-}
-
-/**
- * Environment utilities
- */
-
-export function isTestMode(): boolean {
-  return process.env.NODE_ENV !== 'production';
-}
-
-export function getBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    // Browser
-    return window.location.origin;
-  }
-  
-  // Server
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  
-  if (process.env.NODE_ENV === 'production') {
-    return 'https://yourdomain.com'; // Replace with your production domain
-  }
-  
-  return 'http://localhost:3000';
-}
-
-export function getFatZebraBaseUrl(isTestMode: boolean = true): string {
-  return isTestMode 
-    ? 'https://gateway.pmnts-sandbox.io'
-    : 'https://gateway.fatzebra.com';
-}
-
-/**
- * Error handling utilities
- */
-
-export function extractErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  
-  if (typeof error === 'string') {
-    return error;
-  }
-  
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String(error.message);
-  }
-  
-  return 'An unknown error occurred';
-}
-
-export function extractErrorDetails(error: unknown): string[] {
-  if (error && typeof error === 'object') {
-    if ('errors' in error && Array.isArray(error.errors)) {
-      return error.errors.map(String);
-    }
-    
-    if ('details' in error && Array.isArray(error.details)) {
-      return error.details.map(String);
-    }
-  }
-  
-  return [];
-}
-
-export function mapFatZebraError(errorCode: string): string {
-  const errorMap: Record<string, string> = {
-    '01': 'Refer to card issuer',
-    '02': 'Refer to card issuer, special condition',
-    '03': 'Invalid merchant',
-    '04': 'Pick up card',
-    '05': 'Do not honor',
-    '06': 'Error',
-    '07': 'Pick up card, special condition',
-    '08': 'Honor with identification',
-    '09': 'Request in progress',
-    '10': 'Approved for partial amount',
-    '11': 'Approved (VIP)',
-    '12': 'Invalid transaction',
-    '13': 'Invalid amount',
-    '14': 'Invalid card number',
-    '15': 'No such issuer',
-    '19': 'Re-enter transaction',
-    '21': 'No action taken',
-    '25': 'Unable to locate record on file',
-    '28': 'File is temporarily unavailable',
-    '30': 'Format error',
-    '41': 'Lost card',
-    '43': 'Stolen card',
-    '51': 'Insufficient funds',
-    '54': 'Expired card',
-    '55': 'Incorrect PIN',
-    '57': 'Transaction not permitted to cardholder',
-    '58': 'Transaction not permitted to terminal',
-    '61': 'Exceeds withdrawal amount limit',
-    '62': 'Restricted card',
-    '65': 'Exceeds withdrawal frequency limit',
-    '91': 'Issuer or switch is inoperative',
-    '92': 'Financial institution or intermediate network facility cannot be found for routing',
-    '94': 'Duplicate transmission',
-    '96': 'System malfunction'
-  };
-  
-  return errorMap[errorCode] || 'Transaction declined';
-}
-
-/**
- * Date utilities
- */
-
-export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  return d.toLocaleDateString('en-AU', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-}
-
-export function isExpired(expiryMonth: string, expiryYear: string): boolean {
-  const now = new Date();
-  const currentYear = now.getFullYear() % 100; // Get last 2 digits
-  const currentMonth = now.getMonth() + 1;
-  
-  const expYear = parseInt(expiryYear, 10);
-  const expMonth = parseInt(expiryMonth, 10);
-  
-  if (expYear < currentYear) {
-    return true;
-  }
-  
-  if (expYear === currentYear && expMonth < currentMonth) {
-    return true;
-  }
-  
-  return false;
-}
-
-export function addDays(date: Date, days: number): Date {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-export function formatISO8601(date: Date): string {
-  return date.toISOString();
-}
-
-/**
- * Security utilities
- */
-
+// Mask card number for display
 export function maskCardNumber(cardNumber: string): string {
-  const digits = cardNumber.replace(/\D/g, '');
-  const lastFour = digits.slice(-4);
-  const masked = '*'.repeat(Math.max(0, digits.length - 4));
-  return `${masked}${lastFour}`;
-}
-
-export function maskEmail(email: string): string {
-  const [localPart, domain] = email.split('@');
-  if (!localPart || !domain) return email;
+  const cleanNumber = cardNumber.replace(/\s/g, '');
+  if (cleanNumber.length < 4) {
+    return '*'.repeat(cleanNumber.length);
+  }
   
-  const maskedLocal = localPart.length > 2 
-    ? `${localPart[0]}${'*'.repeat(localPart.length - 2)}${localPart.slice(-1)}`
-    : localPart;
-    
-  return `${maskedLocal}@${domain}`;
+  const lastFour = cleanNumber.slice(-4);
+  const masked = '*'.repeat(cleanNumber.length - 4);
+  return formatCardNumber(masked + lastFour);
 }
 
-export function generateVerificationHash(data: VerificationHashData, sharedSecret: string): string {
-  const payload = `${data.reference}|${data.amount}|${data.currency}|${data.timestamp || Date.now()}`;
-  return createHmac('sha256', sharedSecret)
-    .update(payload)
-    .digest('hex');
-}
-
-export function verifyWebhookSignature(payload: string, signature: string, sharedSecret: string): boolean {
-  const expectedSignature = createHmac('sha256', sharedSecret)
-    .update(payload)
-    .digest('hex');
-  
-  return expectedSignature === signature;
-}
-
-/**
- * Validation utilities
- */
-
+// Validate email
 export function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
 
+// Validate phone number (Australian format)
 export function isValidPhone(phone: string): boolean {
-  const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
-  const cleaned = phone.replace(/[\s\-\(\)]/g, '');
-  return phoneRegex.test(cleaned);
+  const cleanPhone = phone.replace(/\s/g, '');
+  // Australian mobile: starts with 04, then 8 digits
+  // Australian landline: area code (2-8 digits) + number (6-8 digits)
+  const phoneRegex = /^(\+61|0)[2-9]\d{8}$|^04\d{8}$/;
+  return phoneRegex.test(cleanPhone);
 }
 
-export function isValidPostcode(postcode: string, country: string = 'AU'): boolean {
-  const patterns: Record<string, RegExp> = {
-    AU: /^[0-9]{4}$/,
-    US: /^[0-9]{5}(-[0-9]{4})?$/,
-    UK: /^[A-Z]{1,2}[0-9R][0-9A-Z]? [0-9][A-Z]{2}$/i,
-    CA: /^[A-Z][0-9][A-Z] [0-9][A-Z][0-9]$/i
-  };
+// Format phone number
+export function formatPhone(phone: string): string {
+  const cleanPhone = phone.replace(/\D/g, '');
   
-  const pattern = patterns[country];
-  return pattern ? pattern.test(postcode) : true;
-}
-
-export function validateAmount(amount: number, currency: Currency = 'AUD'): boolean {
-  if (amount <= 0) return false;
-  
-  // Minimum amounts by currency
-  const minimums: Record<Currency, number> = {
-    AUD: 0.50,
-    USD: 0.50,
-    NZD: 0.50,
-    GBP: 0.30,
-    EUR: 0.50,
-    CAD: 0.50,
-    SGD: 0.50,
-    HKD: 4.00,
-    JPY: 50
-  };
-  
-  return amount >= (minimums[currency] || 0.50);
-}
-
-/**
- * Response handling utilities
- */
-
-export function handleFatZebraResponse<T>(response: FatZebraResponse<T>): T {
-  if (!response.successful) {
-    throw new Error(
-      response.errors?.join(', ') || 'Transaction failed'
-    );
+  // Australian mobile format
+  if (cleanPhone.startsWith('04') && cleanPhone.length === 10) {
+    return cleanPhone.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
   }
-  return response.response;
+  
+  // Australian landline format
+  if (cleanPhone.length === 10 && /^[2-8]/.test(cleanPhone)) {
+    return cleanPhone.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2 $3');
+  }
+  
+  return phone;
 }
 
-export function isTestCard(cardNumber: string): boolean {
-  const cleanNumber = cardNumber.replace(/\D/g, '');
-  return Object.values(TEST_CARDS).includes(cleanNumber);
+// Validate Australian postcode
+export function isValidPostcode(postcode: string): boolean {
+  return /^\d{4}$/.test(postcode);
 }
 
-/**
- * URL and query utilities
- */
-
-export function buildQueryString(params: Record<string, any>): string {
-  const query = new URLSearchParams();
-  
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== null && value !== undefined && value !== '') {
-      query.append(key, String(value));
-    }
-  });
-  
-  return query.toString();
+// Currency conversion utilities
+export function convertCurrency(
+  amount: number,
+  fromCurrency: string,
+  toCurrency: string,
+  exchangeRate: number
+): number {
+  if (fromCurrency === toCurrency) {
+    return amount;
+  }
+  return Math.round(amount * exchangeRate * 100) / 100;
 }
 
-export function parseQueryString(queryString: string): Record<string, string> {
-  const params = new URLSearchParams(queryString);
-  const result: Record<string, string> = {};
-  
-  params.forEach((value, key) => {
-    result[key] = value;
-  });
-  
-  return result;
+// Calculate transaction fee
+export function calculateTransactionFee(
+  amount: number,
+  feePercentage: number = 2.9,
+  fixedFee: number = 0.30
+): number {
+  return Math.round((amount * (feePercentage / 100) + fixedFee) * 100) / 100;
 }
 
-/**
- * Debounce utility for input validation
- */
+// Validate BSB (Australian Bank State Branch)
+export function isValidBSB(bsb: string): boolean {
+  const cleanBSB = bsb.replace(/\D/g, '');
+  return /^\d{6}$/.test(cleanBSB);
+}
 
-export function debounce<T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
-  
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
+// Format BSB
+export function formatBSB(bsb: string): string {
+  const cleanBSB = bsb.replace(/\D/g, '');
+  if (cleanBSB.length >= 3) {
+    return cleanBSB.replace(/(\d{3})(\d{0,3})/, '$1-$2');
+  }
+  return cleanBSB;
+}
+
+// Validate Australian account number
+export function isValidAccountNumber(accountNumber: string): boolean {
+  const cleanNumber = accountNumber.replace(/\D/g, '');
+  return cleanNumber.length >= 4 && cleanNumber.length <= 10;
+}
+
+// Data sanitization utilities
+export function sanitizeInput(input: string): string {
+  return input.trim().replace(/[<>]/g, '');
+}
+
+export function sanitizeCardData(cardData: any): any {
+  return {
+    ...cardData,
+    card_holder: sanitizeInput(cardData.card_holder || ''),
+    card_number: (cardData.card_number || '').replace(/\D/g, ''),
+    card_expiry: (cardData.card_expiry || '').replace(/\D/g, '').substring(0, 4),
+    cvv: (cardData.cvv || '').replace(/\D/g, '').substring(0, 4)
   };
 }
 
-/**
- * Local storage utilities (with fallback for server-side)
- */
-
-export function getLocalStorageItem(key: string, defaultValue: any = null): any {
-  if (typeof window === 'undefined') return defaultValue;
-  
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultValue;
-  } catch {
-    return defaultValue;
+// Error handling utilities
+export function formatErrorMessage(error: any): string {
+  if (typeof error === 'string') {
+    return error;
   }
+  
+  if (error instanceof Error) {
+    return error.message;
+  }
+  
+  if (error?.message) {
+    return error.message;
+  }
+  
+  if (Array.isArray(error) && error.length > 0) {
+    return error[0];
+  }
+  
+  return 'An unexpected error occurred';
 }
 
-export function setLocalStorageItem(key: string, value: any): void {
-  if (typeof window === 'undefined') return;
-  
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Silently fail
-  }
-}
-
-export function removeLocalStorageItem(key: string): void {
-  if (typeof window === 'undefined') return;
-  
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    // Silently fail
-  }
-}
-
-/**
- * Retry utility for API calls
- */
-
-export async function retryWithBackoff<T>(
+// Retry mechanism for API calls
+export async function retryAsync<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
-  baseDelay: number = 1000
+  delay: number = 1000
 ): Promise<T> {
   let lastError: Error;
   
-  for (let i = 0; i <= maxRetries; i++) {
+  for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn();
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError = error instanceof Error ? error : new Error('Unknown error');
       
-      if (i === maxRetries) {
+      if (i === maxRetries - 1) {
         throw lastError;
       }
       
-      // Exponential backoff
-      const delay = baseDelay * Math.pow(2, i);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
     }
   }
   
   throw lastError!;
 }
+
+// Environment detection utilities
+export function isTestMode(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
+export function getApiBaseUrl(): string {
+  return isTestMode() 
+    ? 'https://gateway.pmnts-sandbox.io'
+    : 'https://gateway.pmnts.io';
+}
+
+// Test card numbers for development
+export const TEST_CARDS = {
+  VISA_SUCCESS: '4005550000000001',
+  VISA_3DS_SUCCESS: '4005554444444460',
+  VISA_DECLINE: '4005550000000019',
+  MASTERCARD_SUCCESS: '5123456789012346',
+  MASTERCARD_3DS_SUCCESS: '5123456789012353',
+  MASTERCARD_DECLINE: '5123456789012353',
+  AMEX_SUCCESS: '345678901234564',
+  AMEX_DECLINE: '345678901234572'
+} as const;
+
+// Export all utilities
+export default {
+  getCardType,
+  isValidCardNumber,
+  validateCard,
+  formatCardNumber,
+  formatExpiryDate,
+  isValidExpiryDate,
+  isValidCVV,
+  formatCurrency,
+  generateReference,
+  maskCardNumber,
+  isValidEmail,
+  isValidPhone,
+  formatPhone,
+  isValidPostcode,
+  convertCurrency,
+  calculateTransactionFee,
+  isValidBSB,
+  formatBSB,
+  isValidAccountNumber,
+  sanitizeInput,
+  sanitizeCardData,
+  formatErrorMessage,
+  retryAsync,
+  isTestMode,
+  getApiBaseUrl,
+  TEST_CARDS
+};
