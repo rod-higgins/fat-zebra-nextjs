@@ -289,7 +289,8 @@ export async function handleTransactionStatus(request: NextRequest): Promise<Nex
  */
 export async function handleVerifyWebhook(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = await request.json();
+    // Note: body parsing removed as it's not currently used in the basic implementation
+    // In a full implementation, the body would be used for signature verification
     const signature = request.headers.get('x-webhook-signature');
     
     if (!signature) {
@@ -347,14 +348,14 @@ export async function handleGenerateHash(request: NextRequest): Promise<NextResp
 }
 
 /**
- * Health check handler
+ * Health check handler (removed unused request parameter)
  */
-export async function handleHealthCheck(request: NextRequest): Promise<NextResponse> {
+export async function handleHealthCheck(): Promise<NextResponse> {
   return NextResponse.json({
     successful: true,
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '0.2.2',
+    version: '0.3.1',
   });
 }
 

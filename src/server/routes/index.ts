@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createFatZebraClient, FatZebraError, handleFatZebraResponse } from '../../lib/client';
-import { generateVerificationHash, extractErrorMessage, extractErrorDetails, validateAmount } from '../../utils';
+import { generateVerificationHash, extractErrorMessage } from '../../utils'; // Removed unused imports
 import type { 
   PurchaseRequest, 
   AuthorizationRequest, 
@@ -289,7 +289,7 @@ export async function handleTransactionStatus(request: NextRequest): Promise<Nex
  */
 export async function handleVerifyWebhook(request: NextRequest): Promise<NextResponse> {
   try {
-    const body = await request.json();
+    // Note: Removed unused 'body' variable declaration
     const signature = request.headers.get('x-webhook-signature');
     
     if (!signature) {
@@ -347,14 +347,14 @@ export async function handleGenerateHash(request: NextRequest): Promise<NextResp
 }
 
 /**
- * Health check handler
+ * Health check handler (removed unused request parameter)
  */
-export async function handleHealthCheck(request: NextRequest): Promise<NextResponse> {
+export async function handleHealthCheck(): Promise<NextResponse> {
   return NextResponse.json({
     successful: true,
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '0.2.2',
+    version: '0.3.0',
   });
 }
 
