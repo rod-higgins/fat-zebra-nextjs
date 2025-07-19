@@ -1,68 +1,32 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import {
-  UsePaymentOptions,
-  UsePaymentResult,
-  PaymentFormData,
+import { useState, useCallback, useRef } from 'react';
+import { 
+  PaymentFormData, 
+  UsePaymentOptions, 
+  UsePaymentResult, 
   CardDetails,
-  PaymentEvent
+  FatZebraResponse,
+  TransactionResponse
 } from '../types';
+import { FatZebraError } from '../lib/client';
 
-export const usePayment = (options: UsePaymentOptions = {}): UsePaymentResult => {
+/**
+ * Custom hook for handling Fat Zebra payments
+ */
+export function usePayment(options: UsePaymentOptions = {}): UsePaymentResult {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   
-  const {
-    enableTokenization = false,
-    enable3DS = false,
-    accessToken,
-    username,
-    autoReset = true
-  } = options;
-
-  // Store the last transaction ID for potential future operations
-  const lastTransactionRef = useRef<string | null>(null);
-  const fatZebraSDKRef = useRef<any>(null);
-
-  // Initialize Fat Zebra SDK for 3DS if needed
-  useEffect(() => {
-    if (enable3DS && accessToken && username) {
-      initializeFatZebraSDK();
-    }
-  }, [enable3DS, accessToken, username]);
-
-  const initializeFatZebraSDK = async () => {
-    try {
-      const { FatZebra } = await import('@fat-zebra/sdk');
-      
-      fatZebraSDKRef.current = new FatZebra({
-        environment: process.env.NODE_ENV === 'production' ? 'production' : 'sandbox',
-        accessToken,
-        username
-      });
-
-      // Set up event listeners for 3DS
-      fatZebraSDKRef.current.on('sca_success', (event: PaymentEvent) => {
-        console.log('3DS Authentication successful:', event);
-      });
-
-      fatZebraSDKRef.current.on('sca_error', (event: PaymentEvent) => {
-        console.error('3DS Authentication failed:', event);
-        setError('3D Secure authentication failed');
-        setLoading(false);
-      });
-
-    } catch (error) {
-      console.error('Failed to initialize Fat Zebra SDK:', error);
-      setError('Failed to initialize secure payment system');
-    }
-  };
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const reset = useCallback(() => {
     setLoading(false);
     setError(null);
     setSuccess(false);
-    lastTransactionRef.current = null;
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
   }, []);
 
   const processPayment = useCallback(async (data: PaymentFormData): Promise<any> => {
@@ -72,217 +36,203 @@ export const usePayment = (options: UsePaymentOptions = {}): UsePaymentResult =>
     setError(null);
     setSuccess(false);
 
+    // Create abort controller for request cancellation
+    abortControllerRef.current = new AbortController();
+
     try {
-      // Validate required data
-      if (!data.cardDetails || !data.amount || data.amount <= 0) {
-        throw new Error('Invalid payment data provided');
+      const requestData = {
+        amount: data.amount,
+        currency: data.currency || 'AUD',
+        reference: data.reference || `ORDER-${Date.now()}`,
+        card_details: data.cardDetails,
+        customer: data.customer,
+        customer_ip: typeof window !== 'undefined' 
+          ? await getClientIpAddress() 
+          : undefined,
+        metadata: {
+          source: '@fwc/fat-zebra-nextjs',
+          timestamp: new Date().toISOString()
+        }
+      };
+
+      const response = await fetch('/api/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+        signal: abortControllerRef.current.signal
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new FatZebraError(
+          errorData.message || 'Payment failed',
+          errorData.errors || [],
+          response.status.toString()
+        );
       }
 
-      let paymentResult;
-
-      if (enable3DS && fatZebraSDKRef.current) {
-        // Process with 3DS2
-        paymentResult = await processPaymentWith3DS(data);
-      } else {
-        // Standard payment processing
-        paymentResult = await processStandardPayment(data);
-      }
-
-      // Store transaction ID for future reference
-      if (paymentResult.id) {
-        lastTransactionRef.current = paymentResult.id;
+      const result = await response.json();
+      
+      if (!result.successful) {
+        throw new FatZebraError(
+          result.message || 'Payment failed',
+          result.errors || ['Transaction was not successful']
+        );
       }
 
       setSuccess(true);
       
-      // Auto-reset after successful payment if enabled
-      if (autoReset) {
-        setTimeout(() => {
-          reset();
-        }, 3000);
+      if (options.autoReset) {
+        setTimeout(reset, 3000);
       }
 
-      return paymentResult;
+      return result;
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Payment processing failed';
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        // Request was cancelled, don't update state
+        return;
+      }
+
+      const errorMessage = error instanceof FatZebraError 
+        ? error.message 
+        : error instanceof Error 
+        ? error.message 
+        : 'An unexpected error occurred';
+
       setError(errorMessage);
-      setSuccess(false);
+      
+      if (options.autoReset) {
+        setTimeout(() => setError(null), 5000);
+      }
+
       throw error;
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
-  }, [loading, enable3DS, autoReset, reset]);
-
-  const processStandardPayment = async (data: PaymentFormData) => {
-    const response = await fetch('/api/payments', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: data.amount,
-        currency: data.currency,
-        reference: data.reference,
-        cardDetails: data.cardDetails,
-        customer: data.customer,
-        customerIp: getClientIP()
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Payment failed');
-    }
-
-    const result = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.error || 'Payment was not successful');
-    }
-
-    return result.transaction;
-  };
-
-  const processPaymentWith3DS = async (data: PaymentFormData) => {
-    if (!fatZebraSDKRef.current) {
-      throw new Error('3DS authentication system not initialized');
-    }
-
-    // First, perform 3DS verification
-    const verificationResult = await fatZebraSDKRef.current.verify({
-      card: {
-        card_holder: data.cardDetails.card_holder,
-        card_number: data.cardDetails.card_number.replace(/\s/g, ''),
-        card_expiry: data.cardDetails.card_expiry,
-        cvv: data.cardDetails.cvv
-      },
-      amount: data.amount,
-      currency: data.currency,
-      reference: data.reference || `PAY-${Date.now()}`
-    });
-
-    if (!verificationResult.successful) {
-      throw new Error(verificationResult.errors?.[0] || '3DS verification failed');
-    }
-
-    // If 3DS successful, process the payment
-    const response = await fetch('/api/payments/with-3ds', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        amount: data.amount,
-        currency: data.currency,
-        reference: data.reference,
-        cardDetails: data.cardDetails,
-        customer: data.customer,
-        customerIp: getClientIP(),
-        verificationData: verificationResult.data
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || '3DS payment failed');
-    }
-
-    const result = await response.json();
-    
-    if (!result.success) {
-      throw new Error(result.error || '3DS payment was not successful');
-    }
-
-    return result.transaction;
-  };
+  }, [loading, options.autoReset, reset]);
 
   const tokenizeCard = useCallback(async (cardDetails: CardDetails): Promise<string> => {
-    if (loading) {
-      throw new Error('Another operation is in progress');
-    }
-
-    if (!enableTokenization) {
-      throw new Error('Tokenization is not enabled');
-    }
+    if (loading) return '';
 
     setLoading(true);
     setError(null);
 
     try {
+      // Generate verification hash if needed
+      let verificationHash: string | undefined;
+      
+      if (options.enableTokenization) {
+        const hashResponse = await fetch('/api/generate-verification-hash', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            reference: `TOKEN-${Date.now()}`,
+            amount: 0,
+            currency: 'AUD'
+          })
+        });
+
+        if (hashResponse.ok) {
+          const hashData = await hashResponse.json();
+          verificationHash = hashData.hash;
+        }
+      }
+
+      const requestData = {
+        ...cardDetails,
+        verification: verificationHash
+      };
+
       const response = await fetch('/api/tokenize', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          cardDetails: {
-            card_holder: cardDetails.card_holder,
-            card_number: cardDetails.card_number.replace(/\s/g, ''),
-            card_expiry: cardDetails.card_expiry,
-            cvv: cardDetails.cvv
-          }
-        })
+        body: JSON.stringify(requestData)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Tokenization failed');
+        throw new FatZebraError(
+          errorData.message || 'Tokenization failed',
+          errorData.errors || []
+        );
       }
 
       const result = await response.json();
       
-      if (!result.success || !result.token) {
-        throw new Error(result.error || 'Tokenization was not successful');
+      if (!result.successful) {
+        throw new FatZebraError(
+          'Tokenization failed',
+          result.errors || ['Token creation was not successful']
+        );
       }
 
-      return result.token;
+      return result.response.token;
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Tokenization failed';
+      const errorMessage = error instanceof FatZebraError 
+        ? error.message 
+        : error instanceof Error 
+        ? error.message 
+        : 'Tokenization failed';
+
       setError(errorMessage);
       throw error;
     } finally {
       setLoading(false);
     }
-  }, [loading, enableTokenization]);
+  }, [loading, options.enableTokenization]);
 
   const verifyCard = useCallback(async (cardDetails: CardDetails): Promise<boolean> => {
-    if (loading) {
-      throw new Error('Another operation is in progress');
-    }
+    if (loading) return false;
 
     setLoading(true);
     setError(null);
 
     try {
+      const requestData = {
+        amount: 1, // $0.01 for verification
+        currency: 'AUD',
+        reference: `VERIFY-${Date.now()}`,
+        card_details: cardDetails,
+        capture: false // Authorization only
+      };
+
       const response = await fetch('/api/verify-card', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          cardDetails: {
-            card_holder: cardDetails.card_holder,
-            card_number: cardDetails.card_number.replace(/\s/g, ''),
-            card_expiry: cardDetails.card_expiry,
-            cvv: cardDetails.cvv
-          }
-        })
+        body: JSON.stringify(requestData)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Card verification failed');
+        throw new FatZebraError(
+          errorData.message || 'Card verification failed',
+          errorData.errors || []
+        );
       }
 
       const result = await response.json();
-      return result.valid === true;
+      return result.successful;
 
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Card verification failed';
+      const errorMessage = error instanceof FatZebraError 
+        ? error.message 
+        : error instanceof Error 
+        ? error.message 
+        : 'Card verification failed';
+
       setError(errorMessage);
-      throw error;
+      return false;
     } finally {
       setLoading(false);
     }
@@ -297,75 +247,33 @@ export const usePayment = (options: UsePaymentOptions = {}): UsePaymentResult =>
     verifyCard,
     reset
   };
-};
+}
 
-// Additional specialized hooks
+/**
+ * Get client IP address for fraud detection
+ */
+async function getClientIpAddress(): Promise<string | undefined> {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    const data = await response.json();
+    return data.ip;
+  } catch {
+    // Fallback to undefined if IP detection fails
+    return undefined;
+  }
+}
 
-export const useOAuthPayment = (
+/**
+ * OAuth-enabled payment hook
+ */
+export function useOAuthPayment(
   accessToken: string,
   username: string,
-  options: Omit<UsePaymentOptions, 'accessToken' | 'username'> = {}
-): UsePaymentResult => {
-  return usePayment({
-    ...options,
-    accessToken,
-    username,
-    enable3DS: true // OAuth payments always support 3DS
-  });
-};
-
-export const useTokenPayment = () => {
+  options: UsePaymentOptions = {}
+): UsePaymentResult {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-
-  const processTokenPayment = useCallback(async (
-    token: string,
-    amount: number,
-    reference: string,
-    currency: string = 'AUD'
-  ) => {
-    setLoading(true);
-    setError(null);
-    setSuccess(false);
-
-    try {
-      const response = await fetch('/api/payments/with-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          token,
-          amount,
-          reference,
-          currency,
-          customerIp: getClientIP()
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Token payment failed');
-      }
-
-      const result = await response.json();
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Token payment was not successful');
-      }
-
-      setSuccess(true);
-      return result.transaction;
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Token payment failed';
-      setError(errorMessage);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const reset = useCallback(() => {
     setLoading(false);
@@ -373,41 +281,210 @@ export const useTokenPayment = () => {
     setSuccess(false);
   }, []);
 
+  const processPayment = useCallback(async (data: PaymentFormData): Promise<any> => {
+    if (loading || !accessToken) return;
+
+    setLoading(true);
+    setError(null);
+    setSuccess(false);
+
+    try {
+      // Use client-side SDK with OAuth token
+      if (typeof window !== 'undefined') {
+        const { Client } = await import('@fat-zebra/sdk');
+        
+        const client = new Client({
+          accessToken,
+          username,
+          environment: process.env.NODE_ENV === 'production' ? 'production' : 'sandbox'
+        });
+
+        const result = await client.purchases.create({
+          amount: data.amount,
+          currency: data.currency || 'AUD',
+          reference: data.reference || `ORDER-${Date.now()}`,
+          card_details: data.cardDetails,
+          customer: data.customer
+        });
+
+        if (!result.successful) {
+          throw new FatZebraError(
+            result.response?.message || 'Payment failed',
+            result.errors || []
+          );
+        }
+
+        setSuccess(true);
+        
+        if (options.autoReset) {
+          setTimeout(reset, 3000);
+        }
+
+        return result;
+      }
+
+    } catch (error) {
+      const errorMessage = error instanceof FatZebraError 
+        ? error.message 
+        : error instanceof Error 
+        ? error.message 
+        : 'Payment failed';
+
+      setError(errorMessage);
+      
+      if (options.autoReset) {
+        setTimeout(() => setError(null), 5000);
+      }
+
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, accessToken, username, options.autoReset, reset]);
+
+  const tokenizeCard = useCallback(async (cardDetails: CardDetails): Promise<string> => {
+    if (loading || !accessToken) return '';
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (typeof window !== 'undefined') {
+        const { Client } = await import('@fat-zebra/sdk');
+        
+        const client = new Client({
+          accessToken,
+          username,
+          environment: process.env.NODE_ENV === 'production' ? 'production' : 'sandbox'
+        });
+
+        const result = await client.cards.create(cardDetails);
+
+        if (!result.successful) {
+          throw new FatZebraError(
+            'Tokenization failed',
+            result.errors || []
+          );
+        }
+
+        return result.response.token;
+      }
+
+      return '';
+
+    } catch (error) {
+      const errorMessage = error instanceof FatZebraError 
+        ? error.message 
+        : error instanceof Error 
+        ? error.message 
+        : 'Tokenization failed';
+
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, accessToken, username]);
+
+  const verifyCard = useCallback(async (cardDetails: CardDetails): Promise<boolean> => {
+    if (loading || !accessToken) return false;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      if (typeof window !== 'undefined') {
+        const { Client } = await import('@fat-zebra/sdk');
+        
+        const client = new Client({
+          accessToken,
+          username,
+          environment: process.env.NODE_ENV === 'production' ? 'production' : 'sandbox'
+        });
+
+        const result = await client.purchases.create({
+          amount: 1,
+          currency: 'AUD',
+          reference: `VERIFY-${Date.now()}`,
+          card_details: cardDetails,
+          capture: false
+        });
+
+        return result.successful;
+      }
+
+      return false;
+
+    } catch (error) {
+      const errorMessage = error instanceof FatZebraError 
+        ? error.message 
+        : error instanceof Error 
+        ? error.message 
+        : 'Card verification failed';
+
+      setError(errorMessage);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, accessToken, username]);
+
   return {
     loading,
     error,
     success,
-    processTokenPayment,
+    processPayment,
+    tokenizeCard,
+    verifyCard,
     reset
   };
-};
+}
 
-export const usePaymentEvents = () => {
-  const [events, setEvents] = useState<PaymentEvent[]>([]);
+/**
+ * Hook for handling payment events and SDK integration
+ */
+export function usePaymentEvents() {
+  const [events, setEvents] = useState<any[]>([]);
+  const [lastEvent, setLastEvent] = useState<any | null>(null);
 
-  const addEvent = useCallback((event: PaymentEvent) => {
-    setEvents(prev => [...prev, { ...event, timestamp: Date.now() }]);
+  const createHandlers = useCallback(() => {
+    return {
+      onSuccess: (event: any) => {
+        setLastEvent(event);
+        setEvents(prev => [...prev, { type: 'success', data: event, timestamp: Date.now() }]);
+      },
+      onError: (event: any) => {
+        setLastEvent(event);
+        setEvents(prev => [...prev, { type: 'error', data: event, timestamp: Date.now() }]);
+      },
+      onCancel: (event: any) => {
+        setLastEvent(event);
+        setEvents(prev => [...prev, { type: 'cancel', data: event, timestamp: Date.now() }]);
+      },
+      onTokenizationSuccess: (event: any) => {
+        setLastEvent(event);
+        setEvents(prev => [...prev, { type: 'tokenization_success', data: event, timestamp: Date.now() }]);
+      },
+      onScaSuccess: (event: any) => {
+        setLastEvent(event);
+        setEvents(prev => [...prev, { type: 'sca_success', data: event, timestamp: Date.now() }]);
+      },
+      onScaError: (event: any) => {
+        setLastEvent(event);
+        setEvents(prev => [...prev, { type: 'sca_error', data: event, timestamp: Date.now() }]);
+      }
+    };
   }, []);
 
   const clearEvents = useCallback(() => {
     setEvents([]);
+    setLastEvent(null);
   }, []);
-
-  const getEventsByType = useCallback((type: string) => {
-    return events.filter(event => event.type === type);
-  }, [events]);
 
   return {
     events,
-    addEvent,
-    clearEvents,
-    getEventsByType
+    lastEvent,
+    createHandlers,
+    clearEvents
   };
-};
-
-// Utility function to get client IP (best effort)
-function getClientIP(): string {
-  // This is a placeholder - in a real application, you'd need to
-  // implement proper IP detection or pass it from the server
-  return '127.0.0.1';
 }

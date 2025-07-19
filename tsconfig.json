@@ -28,7 +28,6 @@
     "incremental": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo",
     
-    // Strict type checking options
     "noImplicitAny": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
@@ -43,7 +42,6 @@
     "noPropertyAccessFromIndexSignature": false,
     "noUncheckedIndexedAccess": false,
     
-    // Module resolution
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
@@ -55,12 +53,9 @@
       "@/server/*": ["src/server/*"]
     },
     
-    // Emit options
     "preserveConstEnums": true,
-    "preserveValueImports": true,
-    "importsNotUsedAsValues": "preserve",
+    "verbatimModuleSyntax": true,
     
-    // Advanced options
     "skipDefaultLibCheck": true,
     "useDefineForClassFields": true
   },

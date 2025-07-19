@@ -1,14 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  PaymentFormProps,
-  PaymentFormData,
-  CardDetails,
-  Customer,
-  PaymentFormErrors
-} from '../types';
-import { validateCard, formatCardNumber, formatExpiryDate, getCardType } from '../utils';
+import React, { useState, useCallback, FormEvent, ChangeEvent } from 'react';
+import { PaymentFormProps, PaymentFormData, CardDetails, Customer, PaymentFormErrors } from '../types';
+import { validateCard, formatCardNumber, formatExpiryDate, formatCvv } from '../utils';
 
-export const PaymentForm: React.FC<PaymentFormProps> = ({
+export function PaymentForm({
   onSubmit,
   amount,
   currency = 'AUD',
@@ -23,8 +17,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
   className = '',
   showAmountField = false,
   requireCustomer = false
-}) => {
-  // Form state - properly structured to match PaymentFormData
+}: PaymentFormProps) {
   const [formData, setFormData] = useState<PaymentFormData>({
     amount: amount || 0,
     currency,
@@ -49,161 +42,118 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
   });
 
   const [errors, setErrors] = useState<PaymentFormErrors>({});
-  const [cardType, setCardType] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 3DS2 integration ref
-  const fatZebraRef = useRef<any>(null);
-
-  // Update amount when prop changes
-  useEffect(() => {
-    if (amount !== undefined) {
-      setFormData(prev => ({ ...prev, amount }));
-    }
-  }, [amount]);
-
-  // Load Fat Zebra SDK for 3DS2 if enabled
-  useEffect(() => {
-    if (enable3DS && accessToken && username) {
-      loadFatZebraSDK();
-    }
-  }, [enable3DS, accessToken, username]);
-
-  const loadFatZebraSDK = async () => {
-    try {
-      // Dynamically import Fat Zebra SDK
-      const { FatZebra } = await import('@fat-zebra/sdk');
-      
-      fatZebraRef.current = new FatZebra({
-        environment: process.env.NODE_ENV === 'production' ? 'production' : 'sandbox',
-        accessToken,
-        username
-      });
-
-      // Set up event listeners
-      fatZebraRef.current.on('sca_success', (event: any) => {
-        onScaSuccess?.(event);
-      });
-
-      fatZebraRef.current.on('sca_error', (error: any) => {
-        onScaError?.(error);
-      });
-
-    } catch (error) {
-      console.error('Failed to load Fat Zebra SDK:', error);
-    }
-  };
-
-  const validateForm = (): boolean => {
+  const validateForm = useCallback((): boolean => {
     const newErrors: PaymentFormErrors = {};
 
-    // Card holder validation
+    // Validate amount
+    if (showAmountField && (!formData.amount || formData.amount <= 0)) {
+      newErrors.amount = 'Amount must be greater than 0';
+    }
+
+    // Validate card details
     if (!formData.cardDetails.card_holder.trim()) {
       newErrors.card_holder = 'Card holder name is required';
     }
 
-    // Card number validation
     const cardValidation = validateCard(formData.cardDetails.card_number);
     if (!cardValidation.isValid) {
       newErrors.card_number = cardValidation.errors[0] || 'Invalid card number';
     }
 
-    // Expiry validation
-    if (!formData.cardDetails.card_expiry || !/^\d{2}\/\d{2}$/.test(formData.cardDetails.card_expiry)) {
-      newErrors.card_expiry = 'Please enter expiry as MM/YY';
+    if (!formData.cardDetails.card_expiry.match(/^(0[1-9]|1[0-2])\/\d{2}$/)) {
+      newErrors.card_expiry = 'Expiry date must be in MM/YY format';
     } else {
+      // Check if card is expired
       const [month, year] = formData.cardDetails.card_expiry.split('/');
-      const currentDate = new Date();
       const expiryDate = new Date(2000 + parseInt(year), parseInt(month) - 1);
-      
-      if (expiryDate < currentDate) {
+      const now = new Date();
+      if (expiryDate < now) {
         newErrors.card_expiry = 'Card has expired';
       }
     }
 
-    // CVV validation
-    if (!formData.cardDetails.cvv || !/^\d{3,4}$/.test(formData.cardDetails.cvv)) {
-      newErrors.cvv = 'Please enter a valid CVV';
+    if (!formData.cardDetails.cvv || formData.cardDetails.cvv.length < 3) {
+      newErrors.cvv = 'CVV must be at least 3 digits';
     }
 
-    // Amount validation (if shown)
-    if (showAmountField && (!formData.amount || formData.amount <= 0)) {
-      newErrors.amount = 'Please enter a valid amount';
-    }
-
-    // Customer validation (if required)
+    // Validate customer details if required
     if (requireCustomer && formData.customer) {
-      if (!formData.customer.email || !/\S+@\S+\.\S+/.test(formData.customer.email)) {
-        newErrors.email = 'Please enter a valid email address';
-      }
       if (!formData.customer.first_name?.trim()) {
         newErrors.first_name = 'First name is required';
       }
       if (!formData.customer.last_name?.trim()) {
         newErrors.last_name = 'Last name is required';
       }
+      if (!formData.customer.email?.trim()) {
+        newErrors.email = 'Email is required';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customer.email)) {
+        newErrors.email = 'Invalid email format';
+      }
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData, showAmountField, requireCustomer]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    let formattedValue = value;
 
-    // Clear any existing errors for this field
-    if (errors[name as keyof PaymentFormErrors]) {
-      setErrors(prev => ({ ...prev, [name]: undefined }));
-    }
+    if (name.startsWith('card_')) {
+      const cardField = name.replace('card_', '') as keyof CardDetails;
+      let formattedValue = value;
 
-    // Handle card details fields
-    if (['card_holder', 'card_number', 'card_expiry', 'cvv'].includes(name)) {
-      // Format card number
-      if (name === 'card_number') {
-        formattedValue = formatCardNumber(value);
-        const type = getCardType(value);
-        setCardType(type);
-      }
-
-      // Format expiry date
-      if (name === 'card_expiry') {
-        formattedValue = formatExpiryDate(value);
-      }
-
-      // Limit CVV length
-      if (name === 'cvv') {
-        formattedValue = value.replace(/\D/g, '').substring(0, 4);
+      // Apply formatting based on field
+      switch (cardField) {
+        case 'card_number':
+          formattedValue = formatCardNumber(value);
+          break;
+        case 'card_expiry':
+          formattedValue = formatExpiryDate(value);
+          break;
+        case 'cvv':
+          formattedValue = formatCvv(value);
+          break;
       }
 
       setFormData(prev => ({
         ...prev,
         cardDetails: {
           ...prev.cardDetails,
-          [name]: formattedValue
+          [cardField]: formattedValue
         }
       }));
-    }
-    // Handle customer fields
-    else if (requireCustomer && formData.customer && ['first_name', 'last_name', 'email', 'phone', 'address', 'city', 'state', 'postcode', 'country'].includes(name)) {
+    } else if (name === 'amount') {
+      setFormData(prev => ({
+        ...prev,
+        amount: parseFloat(value) || 0
+      }));
+    } else if (formData.customer && Object.keys(formData.customer).includes(name)) {
       setFormData(prev => ({
         ...prev,
         customer: {
           ...prev.customer!,
-          [name]: formattedValue
+          [name]: value
         }
       }));
-    }
-    // Handle top-level fields
-    else {
+    } else {
       setFormData(prev => ({
         ...prev,
-        [name]: name === 'amount' ? parseFloat(formattedValue) || 0 : formattedValue
+        [name]: value
       }));
     }
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+    // Clear error for this field
+    if (errors[name as keyof PaymentFormErrors]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: undefined
+      }));
+    }
+  }, [errors, formData.customer]);
+
+  const handleSubmit = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     
     if (isSubmitting || loading) return;
@@ -212,29 +162,30 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
       return;
     }
 
-    // Generate reference if not provided
-    if (!formData.reference) {
-      setFormData(prev => ({
-        ...prev,
-        reference: `PAY-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-      }));
-    }
-
     setIsSubmitting(true);
+    setErrors({});
 
     try {
-      await onSubmit(formData);
+      // Generate reference if not provided
+      const submissionData: PaymentFormData = {
+        ...formData,
+        reference: formData.reference || `ORDER-${Date.now()}`
+      };
+
+      await onSubmit(submissionData);
+
     } catch (error) {
-      console.error('Payment submission error:', error);
       setErrors({
-        general: error instanceof Error ? error.message : 'Payment failed. Please try again.'
+        general: error instanceof Error 
+          ? error.message 
+          : 'Payment failed. Please try again.'
       });
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [formData, isSubmitting, loading, validateForm, onSubmit]);
 
-  const inputClasses = "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent";
+  const inputClasses = "w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed";
   const errorClasses = "text-red-600 text-sm mt-1";
   const labelClasses = "block text-sm font-medium text-gray-700 mb-1";
 
@@ -251,7 +202,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
       {showAmountField && (
         <div>
           <label htmlFor="amount" className={labelClasses}>
-            Amount ({currency})
+            Amount ({currency}) *
           </label>
           <input
             type="number"
@@ -263,6 +214,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
             min="0.01"
             className={inputClasses}
             disabled={loading || isSubmitting}
+            placeholder="0.00"
           />
           {errors.amount && <p className={errorClasses}>{errors.amount}</p>}
         </div>
@@ -285,6 +237,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
             onChange={handleInputChange}
             className={inputClasses}
             disabled={loading || isSubmitting}
+            placeholder="John Doe"
             autoComplete="cc-name"
           />
           {errors.card_holder && <p className={errorClasses}>{errors.card_holder}</p>}
@@ -294,7 +247,6 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
         <div>
           <label htmlFor="card_number" className={labelClasses}>
             Card Number *
-            {cardType && <span className="ml-2 text-xs text-gray-500">({cardType})</span>}
           </label>
           <input
             type="text"
@@ -306,6 +258,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
             disabled={loading || isSubmitting}
             placeholder="1234 5678 9012 3456"
             autoComplete="cc-number"
+            maxLength={19}
           />
           {errors.card_number && <p className={errorClasses}>{errors.card_number}</p>}
         </div>
@@ -326,6 +279,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
               disabled={loading || isSubmitting}
               placeholder="MM/YY"
               autoComplete="cc-exp"
+              maxLength={5}
             />
             {errors.card_expiry && <p className={errorClasses}>{errors.card_expiry}</p>}
           </div>
@@ -344,6 +298,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
               disabled={loading || isSubmitting}
               placeholder="123"
               autoComplete="cc-csc"
+              maxLength={4}
             />
             {errors.cvv && <p className={errorClasses}>{errors.cvv}</p>}
           </div>
@@ -368,6 +323,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
                 onChange={handleInputChange}
                 className={inputClasses}
                 disabled={loading || isSubmitting}
+                placeholder="John"
               />
               {errors.first_name && <p className={errorClasses}>{errors.first_name}</p>}
             </div>
@@ -384,6 +340,7 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
                 onChange={handleInputChange}
                 className={inputClasses}
                 disabled={loading || isSubmitting}
+                placeholder="Doe"
               />
               {errors.last_name && <p className={errorClasses}>{errors.last_name}</p>}
             </div>
@@ -401,57 +358,129 @@ export const PaymentForm: React.FC<PaymentFormProps> = ({
               onChange={handleInputChange}
               className={inputClasses}
               disabled={loading || isSubmitting}
+              placeholder="john@example.com"
             />
             {errors.email && <p className={errorClasses}>{errors.email}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="phone" className={labelClasses}>
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              id="phone"
+              name="phone"
+              value={formData.customer.phone || ''}
+              onChange={handleInputChange}
+              className={inputClasses}
+              disabled={loading || isSubmitting}
+              placeholder="+61 400 000 000"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="address" className={labelClasses}>
+              Address
+            </label>
+            <input
+              type="text"
+              id="address"
+              name="address"
+              value={formData.customer.address || ''}
+              onChange={handleInputChange}
+              className={inputClasses}
+              disabled={loading || isSubmitting}
+              placeholder="123 Main Street"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label htmlFor="city" className={labelClasses}>
+                City
+              </label>
+              <input
+                type="text"
+                id="city"
+                name="city"
+                value={formData.customer.city || ''}
+                onChange={handleInputChange}
+                className={inputClasses}
+                disabled={loading || isSubmitting}
+                placeholder="Sydney"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="state" className={labelClasses}>
+                State
+              </label>
+              <input
+                type="text"
+                id="state"
+                name="state"
+                value={formData.customer.state || ''}
+                onChange={handleInputChange}
+                className={inputClasses}
+                disabled={loading || isSubmitting}
+                placeholder="NSW"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="postcode" className={labelClasses}>
+                Postcode
+              </label>
+              <input
+                type="text"
+                id="postcode"
+                name="postcode"
+                value={formData.customer.postcode || ''}
+                onChange={handleInputChange}
+                className={inputClasses}
+                disabled={loading || isSubmitting}
+                placeholder="2000"
+              />
+            </div>
           </div>
         </div>
       )}
 
-      {/* Reference Field */}
-      <div>
-        <label htmlFor="reference" className={labelClasses}>
-          Reference (Optional)
-        </label>
-        <input
-          type="text"
-          id="reference"
-          name="reference"
-          value={formData.reference}
-          onChange={handleInputChange}
-          className={inputClasses}
-          disabled={loading || isSubmitting}
-          placeholder="Order reference or ID"
-        />
-      </div>
-
       {/* Submit Button */}
-      <button
-        type="submit"
-        disabled={loading || isSubmitting}
-        className={`w-full py-3 px-4 rounded-md font-medium text-white transition-colors duration-200 ${
-          loading || isSubmitting
-            ? 'bg-gray-400 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
-        }`}
-      >
-        {loading || isSubmitting ? (
-          <span className="flex items-center justify-center">
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Processing...
-          </span>
-        ) : (
-          `Pay ${amount ? `${currency} ${amount.toFixed(2)}` : ''}`
-        )}
-      </button>
-
-      {/* Security Notice */}
-      <div className="text-xs text-gray-500 text-center">
-        <p>🔒 Your payment information is secure and encrypted</p>
-        {enable3DS && <p>3D Secure authentication enabled for enhanced security</p>}
+      <div className="pt-4">
+        <button
+          type="submit"
+          disabled={loading || isSubmitting}
+          className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+        >
+          {loading || isSubmitting ? (
+            <span className="flex items-center justify-center">
+              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Processing...
+            </span>
+          ) : (
+            `Pay ${amount ? `${currency} ${amount.toFixed(2)}` : ''}`
+          )}
+        </button>
       </div>
+
+      {/* 3DS2 Notice */}
+      {enable3DS && (
+        <div className="text-xs text-gray-500 text-center">
+          This payment is secured with 3D Secure authentication
+        </div>
+      )}
+
+      {/* Tokenization Notice */}
+      {enableTokenization && (
+        <div className="text-xs text-gray-500 text-center">
+          Your card will be securely tokenized for future use
+        </div>
+      )}
     </form>
   );
-};
+}

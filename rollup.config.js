@@ -1,10 +1,7 @@
-import resolve from '@rollup/plugin-node-resolve';
-import commonjs from '@rollup/plugin-commonjs';
-import typescript from '@rollup/plugin-typescript';
-import dts from 'rollup-plugin-dts';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
+const resolve = require('@rollup/plugin-node-resolve');
+const commonjs = require('@rollup/plugin-commonjs');
+const typescript = require('@rollup/plugin-typescript');
+const dts = require('rollup-plugin-dts');
 const pkg = require('./package.json');
 
 const external = [
@@ -25,7 +22,7 @@ const getPlugins = (tsConfigPath = './tsconfig.build.json') => [
   })
 ];
 
-export default [
+module.exports = [
   // Main library build - ES Module
   {
     input: 'src/index.ts',
@@ -153,7 +150,7 @@ export default [
       file: pkg.types,
       format: 'esm'
     },
-    plugins: [dts()]
+    plugins: [dts.default()]
   },
 
   // Type definitions for components
@@ -163,7 +160,7 @@ export default [
       file: 'dist/components/index.d.ts',
       format: 'esm'
     },
-    plugins: [dts()]
+    plugins: [dts.default()]
   },
 
   // Type definitions for hooks
@@ -173,7 +170,7 @@ export default [
       file: 'dist/hooks/index.d.ts',
       format: 'esm'
     },
-    plugins: [dts()]
+    plugins: [dts.default()]
   },
 
   // Type definitions for server
@@ -183,7 +180,7 @@ export default [
       file: 'dist/server/index.d.ts',
       format: 'esm'
     },
-    plugins: [dts()]
+    plugins: [dts.default()]
   },
 
   // Type definitions for utils
@@ -193,6 +190,6 @@ export default [
       file: 'dist/utils/index.d.ts',
       format: 'esm'
     },
-    plugins: [dts()]
+    plugins: [dts.default()]
   }
 ];

@@ -12,7 +12,18 @@ import {
   WebhookEvent,
   SettlementResponse
 } from '../types';
-import { createHmac } from 'crypto';
+
+// Use dynamic import for crypto to handle both Node.js and browser environments
+const getCrypto = async () => {
+  if (typeof window !== 'undefined') {
+    // Browser environment - use Web Crypto API
+    return window.crypto;
+  } else {
+    // Node.js environment
+    const crypto = await import('crypto');
+    return crypto;
+  }
+};
 
 export class FatZebraError extends Error {
   public errors: string[];
@@ -89,51 +100,13 @@ export class FatZebraClient {
       if (error instanceof FatZebraError) {
         throw error;
       }
+      
+      // Handle network and other errors
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       throw new FatZebraError(
-        error instanceof Error ? error.message : 'Unknown error occurred',
-        [error instanceof Error ? error.message : 'Unknown error'],
+        errorMessage,
+        [errorMessage],
         'NETWORK_ERROR'
-      );
-    }
-  }
-
-  // OAuth Methods
-  async generateAccessToken(config: OAuthConfig): Promise<{ access_token: string; expires_in: number }> {
-    const tokenUrl = `${this.baseUrl}/oauth/token`;
-    
-    const body = new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      scope: config.scope || 'api'
-    });
-
-    try {
-      const response = await fetch(tokenUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': '@fwc/fat-zebra-nextjs/0.2.0'
-        },
-        body: body.toString()
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new FatZebraError(
-          'OAuth token generation failed',
-          [error.error_description || error.error || 'Unknown OAuth error']
-        );
-      }
-
-      return await response.json();
-    } catch (error) {
-      if (error instanceof FatZebraError) {
-        throw error;
-      }
-      throw new FatZebraError(
-        'OAuth token generation failed',
-        [error instanceof Error ? error.message : 'Unknown error']
       );
     }
   }
@@ -151,20 +124,25 @@ export class FatZebraClient {
     customerIp?: string,
     extra?: any
   ): Promise<FatZebraResponse<TransactionResponse>> {
-    const purchaseData: PurchaseRequest = {
-      card_token: cardToken,
+    const request: PurchaseRequest = {
       amount,
-      reference,
       currency,
+      reference,
+      card_token: cardToken,
       customer_ip: customerIp,
       extra
     };
 
-    return this.createPurchase(purchaseData);
+    return this.createPurchase(request);
   }
 
   async getPurchase(purchaseId: string): Promise<FatZebraResponse<TransactionResponse>> {
     return this.makeRequest<TransactionResponse>(`purchases/${purchaseId}`, 'GET');
+  }
+
+  async searchPurchases(params?: Record<string, any>): Promise<FatZebraResponse<TransactionResponse[]>> {
+    const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.makeRequest<TransactionResponse[]>(`purchases${queryString}`, 'GET');
   }
 
   // Authorization Methods
@@ -179,8 +157,8 @@ export class FatZebraClient {
     authorizationId: string,
     amount?: number
   ): Promise<FatZebraResponse<TransactionResponse>> {
-    const captureData = amount ? { amount } : {};
-    return this.makeRequest<TransactionResponse>(`purchases/${authorizationId}/capture`, 'POST', captureData);
+    const data = amount ? { amount } : {};
+    return this.makeRequest<TransactionResponse>(`purchases/${authorizationId}/capture`, 'POST', data);
   }
 
   async voidAuthorization(authorizationId: string): Promise<FatZebraResponse<TransactionResponse>> {
@@ -196,40 +174,93 @@ export class FatZebraClient {
     return this.makeRequest<TransactionResponse>(`refunds/${refundId}`, 'GET');
   }
 
+  async searchRefunds(params?: Record<string, any>): Promise<FatZebraResponse<TransactionResponse[]>> {
+    const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
+    return this.makeRequest<TransactionResponse[]>(`refunds${queryString}`, 'GET');
+  }
+
   // Tokenization Methods
-  async createToken(request: TokenizationRequest): Promise<FatZebraResponse<TokenizationResponse>> {
+  async tokenizeCard(request: TokenizationRequest): Promise<FatZebraResponse<TokenizationResponse>> {
     return this.makeRequest<TokenizationResponse>('credit_cards', 'POST', request);
   }
 
-  async getToken(tokenId: string): Promise<FatZebraResponse<TokenizationResponse>> {
-    return this.makeRequest<TokenizationResponse>(`credit_cards/${tokenId}`, 'GET');
+  async getCardToken(token: string): Promise<FatZebraResponse<TokenizationResponse>> {
+    return this.makeRequest<TokenizationResponse>(`credit_cards/${token}`, 'GET');
+  }
+
+  async deleteCardToken(token: string): Promise<FatZebraResponse<{ deleted: boolean }>> {
+    return this.makeRequest<{ deleted: boolean }>(`credit_cards/${token}`, 'DELETE');
   }
 
   // Verification Hash Generation
-  generateVerificationHash(data: VerificationHashData): string {
+  async generateVerificationHash(data: VerificationHashData): Promise<string> {
     if (!this.sharedSecret) {
-      throw new FatZebraError('Shared secret is required for verification hash generation');
+      throw new Error('Shared secret is required for verification hash generation');
     }
 
-    const timestamp = data.timestamp || Math.floor(Date.now() / 1000);
-    const hashString = `${data.reference}${data.amount}${data.currency}${timestamp}`;
+    const timestamp = data.timestamp || Date.now();
+    const hashString = `${data.reference}${data.amount}${data.currency}${timestamp}${this.sharedSecret}`;
     
-    return createHmac('sha256', this.sharedSecret)
-      .update(hashString)
-      .digest('hex');
+    try {
+      if (typeof window !== 'undefined') {
+        // Browser environment - use Web Crypto API
+        const encoder = new TextEncoder();
+        const key = await window.crypto.subtle.importKey(
+          'raw',
+          encoder.encode(this.sharedSecret),
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+        const signature = await window.crypto.subtle.sign('HMAC', key, encoder.encode(hashString));
+        return Array.from(new Uint8Array(signature))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+      } else {
+        // Node.js environment
+        const crypto = await import('crypto');
+        return crypto.createHmac('sha256', this.sharedSecret).update(hashString).digest('hex');
+      }
+    } catch (error) {
+      throw new FatZebraError('Failed to generate verification hash', [], 'HASH_GENERATION_ERROR');
+    }
   }
 
   // Webhook Verification
-  verifyWebhookSignature(payload: string, signature: string): boolean {
+  async verifyWebhookSignature(payload: string, signature: string): Promise<boolean> {
     if (!this.sharedSecret) {
-      throw new FatZebraError('Shared secret is required for webhook verification');
+      throw new Error('Shared secret is required for webhook verification');
     }
 
-    const expectedSignature = createHmac('sha256', this.sharedSecret)
-      .update(payload)
-      .digest('hex');
-
-    return expectedSignature === signature;
+    try {
+      if (typeof window !== 'undefined') {
+        // Browser environment
+        const encoder = new TextEncoder();
+        const key = await window.crypto.subtle.importKey(
+          'raw',
+          encoder.encode(this.sharedSecret),
+          { name: 'HMAC', hash: 'SHA-256' },
+          false,
+          ['sign']
+        );
+        const expectedSignatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+        const expectedSignature = Array.from(new Uint8Array(expectedSignatureBuffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+        
+        return expectedSignature === signature;
+      } else {
+        // Node.js environment
+        const crypto = await import('crypto');
+        const expectedSignature = crypto.createHmac('sha256', this.sharedSecret).update(payload).digest('hex');
+        return crypto.timingSafeEqual(
+          Buffer.from(signature, 'hex'),
+          Buffer.from(expectedSignature, 'hex')
+        );
+      }
+    } catch (error) {
+      return false;
+    }
   }
 
   // Settlement Methods
@@ -280,7 +311,7 @@ export const TEST_CARDS = {
   VISA_DECLINE: '4005550000000019',
   MASTERCARD_SUCCESS: '5123456789012346',
   MASTERCARD_3DS_SUCCESS: '5123456789012353',
-  MASTERCARD_DECLINE: '5123456789012353',
+  MASTERCARD_DECLINE: '5123456789012361',
   AMEX_SUCCESS: '345678901234564',
   AMEX_DECLINE: '345678901234572'
 } as const;
