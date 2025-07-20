@@ -1,0 +1,231 @@
+name: Development Checks
+
+on:
+  push:
+    branches-ignore: [ main ]
+  pull_request:
+    types: [ opened, synchronize, ready_for_review ]
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # Fast lint and type check for development
+  quick-check:
+    name: Quick Lint & Type Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Lint check
+        run: npm run lint
+        
+      - name: Type check
+        run: npm run typecheck
+        
+      - name: Format check
+        run: npm run checkformat
+
+  # Run tests on changed files
+  test-changes:
+    name: Test Changes
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Get changed files
+        id: changed-files
+        run: |
+          # Get changed TypeScript/JavaScript files
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} | grep -E '\.(ts|tsx|js|jsx)$' | tr '\n' ' ' || echo "")
+          echo "changed-files=$CHANGED_FILES" >> $GITHUB_OUTPUT
+          echo "Changed files: $CHANGED_FILES"
+          
+      - name: Run tests
+        run: |
+          if [ -n "${{ steps.changed-files.outputs.changed-files }}" ]; then
+            echo "Running tests for changed files..."
+            npm run test -- --passWithNoTests
+          else
+            echo "No TypeScript/JavaScript files changed, skipping tests"
+          fi
+
+  # Quick build check
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Check TypeScript compilation
+        run: npm run buildtypes
+        
+      - name: Check if build would succeed
+        run: |
+          echo "🔨 Testing build process..."
+          npm run buildclean
+          npm run buildtypes
+          
+          # Quick check that types were generated
+          if [ -f "dist/index.d.ts" ] && [ -f "dist/server/index.d.ts" ]; then
+            echo "TypeScript declarations generated successfully"
+          else
+            echo "TypeScript declarations not generated"
+            exit 1
+          fi
+
+  # Security check for PRs
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Quick security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+  # Summary job
+  dev-summary:
+    name: Development Summary
+    runs-on: ubuntu-latest
+    needs: [quick-check, test-changes, build-check, security-check]
+    if: always() && github.event.pull_request.draft == false
+    
+    steps:
+      - name: Summary
+        run: |
+          echo "🚀 Development Checks Summary"
+          echo "============================"
+          echo "Lint & Type Check: ${{ needs.quick-check.result }}"
+          echo "Test Changes: ${{ needs.test-changes.result }}"
+          echo "Build Check: ${{ needs.build-check.result }}"
+          echo "Security Check: ${{ needs.security-check.result }}"
+          
+          if [ "${{ needs.quick-check.result }}" == "failure" ] || 
+             [ "${{ needs.test-changes.result }}" == "failure" ] || 
+             [ "${{ needs.build-check.result }}" == "failure" ]; then
+            echo "Some checks failed. Please fix the issues before merging."
+            exit 1
+          fi
+          
+          echo "All development checks passed!"
+
+  # Auto-comment on PR with results
+  pr-comment:
+    name: PR Comment
+    runs-on: ubuntu-latest
+    needs: [dev-summary]
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    
+    steps:
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Development Checks')
+            );
+            
+            const checkResults = {
+              'quick-check': '${{ needs.quick-check.result }}',
+              'test-changes': '${{ needs.test-changes.result }}',
+              'build-check': '${{ needs.build-check.result }}',
+              'security-check': '${{ needs.security-check.result }}'
+            };
+            
+            const allPassed = Object.values(checkResults).every(result => result === 'success');
+            const emoji = allPassed ? 'Yes' : 'No';
+            
+            const body = `
+            ## ${emoji} Development Checks Results
+            
+            | Check | Status |
+            |-------|--------|
+            | Lint & Type Check | ${checkResults['quick-check'] === 'success' ? 'Yes' : 'No'} |
+            | Test Changes | ${checkResults['test-changes'] === 'success' ? 'Yes' : 'No'} |
+            | Build Check | ${checkResults['build-check'] === 'success' ? 'Yes' : 'No'} |
+            | Security Check | ${checkResults['security-check'] === 'success' ? 'Yes' : 'No'} |
+            
+            ${allPassed ? 
+              'All checks passed! This PR is ready for review.' : 
+              'Some checks failed. Please fix the issues before merging.'
+            }
+            
+            *Updated: ${new Date().toISOString()}*
+            `;
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
