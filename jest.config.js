@@ -1,5 +1,5 @@
 /**
- * Jest Configuration - Enhanced for Fat Zebra v0.4.6
+ * Jest Configuration
  * 
  * This configuration enhances the existing Jest setup to address React testing 
  * warnings and improve test stability for the usePayment hook and other components.
