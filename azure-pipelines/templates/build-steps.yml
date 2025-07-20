@@ -1,0 +1,156 @@
+# templates/build-steps.yml
+parameters:
+- name: nodeVersion
+  type: string
+  default: '20'
+- name: skipArtifactUpload
+  type: boolean
+  default: false
+- name: validateArtifacts
+  type: boolean
+  default: true
+
+steps:
+- task: NodeTool@0
+  inputs:
+    versionSpec: ${{ parameters.nodeVersion }}
+  displayName: 'Setup Node.js ${{ parameters.nodeVersion }}'
+
+- task: Cache@2
+  inputs:
+    key: 'npm | "$(Agent.OS)" | package-lock.json'
+    restoreKeys: |
+      npm | "$(Agent.OS)"
+    path: ~/.npm
+  displayName: 'Cache npm'
+
+- script: npm ci
+  displayName: 'Install dependencies'
+
+- script: npm run buildclean
+  displayName: 'Clean previous builds'
+
+- script: npm run buildtypes
+  displayName: 'Build TypeScript declarations'
+
+- script: npm run buildjs
+  displayName: 'Build JavaScript bundles'
+
+- ${{ if eq(parameters.validateArtifacts, true) }}:
+  - script: |
+      echo "🔍 Checking build artifacts..."
+      ls -la dist/
+      
+      # Check main artifacts exist
+      if [ -f "dist/index.js" ] && [ -f "dist/index.esm.js" ] && [ -f "dist/index.d.ts" ]; then
+        echo "Main build artifacts present"
+      else
+        echo "Missing main build artifacts"
+        echo "Expected files:"
+        echo "  - dist/index.js"
+        echo "  - dist/index.esm.js" 
+        echo "  - dist/index.d.ts"
+        echo "Actual files in dist/:"
+        find dist/ -type f | sort
+        exit 1
+      fi
+      
+      # Check server artifacts exist
+      if [ -f "dist/server/index.js" ] && [ -f "dist/server/index.d.ts" ]; then
+        echo "Server build artifacts present"
+      else
+        echo "Missing server build artifacts"
+        echo "Expected files:"
+        echo "  - dist/server/index.js"
+        echo "  - dist/server/index.d.ts"
+        echo "Actual files in dist/server/:"
+        find dist/server/ -type f 2>/dev/null | sort || echo "dist/server/ directory not found"
+        exit 1
+      fi
+      
+      # Check components artifacts exist
+      if [ -f "dist/components/index.js" ] && [ -f "dist/components/index.d.ts" ]; then
+        echo "Components build artifacts present"
+      else
+        echo "Missing components build artifacts"
+        echo "Expected files:"
+        echo "  - dist/components/index.js"
+        echo "  - dist/components/index.d.ts"
+        echo "Actual files in dist/components/:"
+        find dist/components/ -type f 2>/dev/null | sort || echo "dist/components/ directory not found"
+        exit 1
+      fi
+      
+      # Additional validation checks
+      echo "Build artifact details:"
+      echo "Total files in dist/: $(find dist/ -type f | wc -l)"
+      echo "Main bundle size: $(stat -f%z dist/index.js 2>/dev/null || stat -c%s dist/index.js 2>/dev/null || echo "unknown") bytes"
+      echo "ESM bundle size: $(stat -f%z dist/index.esm.js 2>/dev/null || stat -c%s dist/index.esm.js 2>/dev/null || echo "unknown") bytes"
+      
+      # Check for source maps (optional)
+      if [ -f "dist/index.js.map" ]; then
+        echo "Source maps present"
+      else
+        echo "No source maps found (this may be expected for production builds)"
+      fi
+      
+      # Validate TypeScript declarations
+      echo "Validating TypeScript declarations..."
+      if command -v tsc >/dev/null 2>&1; then
+        npx tsc --noEmit --skipLibCheck dist/index.d.ts
+        echo "TypeScript declarations are valid"
+      else
+        echo "TypeScript not available for declaration validation"
+      fi
+      
+      echo "All build artifacts validated successfully"
+    displayName: 'Verify build artifacts'
+
+- script: |
+    echo "Build Summary:"
+    echo "================"
+    echo "Node Version: ${{ parameters.nodeVersion }}"
+    echo "Build Time: $(date)"
+    echo "Artifacts Created:"
+    find dist/ -type f | while read file; do
+      size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "unknown")
+      echo "  - $file ($size bytes)"
+    done
+  displayName: 'Build summary'
+
+- ${{ if eq(parameters.skipArtifactUpload, false) }}:
+  - task: PublishPipelineArtifact@1
+    inputs:
+      targetPath: 'dist'
+      artifact: 'build-artifacts'
+      publishLocation: 'pipeline'
+    displayName: 'Upload build artifacts'
+    condition: succeeded()
+
+# Optional: Create a build manifest
+- script: |
+    cat > build-manifest.json << EOF
+    {
+      "buildId": "$(Build.BuildId)",
+      "buildNumber": "$(Build.BuildNumber)",
+      "sourceVersion": "$(Build.SourceVersion)",
+      "sourceBranch": "$(Build.SourceBranchName)",
+      "buildTime": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+      "nodeVersion": "${{ parameters.nodeVersion }}",
+      "artifacts": [
+        $(find dist/ -type f | sed 's/.*/"&"/' | paste -sd, -)
+      ]
+    }
+    EOF
+    
+    echo "Build manifest created:"
+    cat build-manifest.json
+  displayName: 'Create build manifest'
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: 'build-manifest.json'
+    artifact: 'build-manifest'
+    publishLocation: 'pipeline'
+  displayName: 'Upload build manifest'
+  condition: succeeded()

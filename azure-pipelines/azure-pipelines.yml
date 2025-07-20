@@ -1,0 +1,47 @@
+# Updated sections of azure-pipelines.yml
+
+- job: Test
+  displayName: 'Test'
+  strategy:
+    matrix:
+      Node18:
+        nodeVersion: '18'
+        runCoverage: false
+      Node20:
+        nodeVersion: '20'
+        runCoverage: true
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:
+  - template: templates/test-steps.yml
+    parameters:
+      nodeVersion: $(nodeVersion)
+      runCoverage: $(runCoverage)
+
+# In the Deploy stage
+- deployment: PublishNPM
+  displayName: 'Publish to NPM'
+  environment: 'production'
+  strategy:
+    runOnce:
+      deploy:
+        steps:
+        - template: templates/deploy-steps.yml
+          parameters:
+            environment: 'production'
+            deployDocs: true
+            publishNpm: true
+
+- deployment: DeployDocs
+  displayName: 'Deploy Documentation'
+  environment: 'staging'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  strategy:
+    runOnce:
+      deploy:
+        steps:
+        - template: templates/deploy-steps.yml
+          parameters:
+            environment: 'staging'
+            deployDocs: true
+            publishNpm: false
