@@ -437,7 +437,7 @@ export async function handleHealthCheck(): Promise<NextResponse> {
     successful: true,
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '0.5.0',
+    version: '0.5.1',
   });
 }
 
