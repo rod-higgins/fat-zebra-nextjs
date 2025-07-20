@@ -132,7 +132,7 @@ export class FatZebraClient {
       Authorization: `Basic ${Buffer.from(`${this.config.username}:${this.config.token}`).toString(
         'base64'
       )}`,
-      'User-Agent': 'FatZebra Next.js v0.4.9',
+      'User-Agent': 'FatZebra Next.js v0.5.0',
     };
 
     const requestOptions: RequestInit = {
