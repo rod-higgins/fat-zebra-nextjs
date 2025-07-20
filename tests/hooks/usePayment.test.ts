@@ -13,6 +13,29 @@ const {
   createMockErrorResponse
 } = require('../setup');
 
+// Fallback: if createMockSuccessResponse is still not available, create a local one
+const safeCreateMockSuccessResponse = createMockSuccessResponse || (() => ({
+  successful: true,
+  response: {
+    id: 'txn-123',
+    amount: 2500,
+    currency: 'AUD',
+    reference: 'TEST-REF-123',
+    message: 'Approved',
+    successful: true,
+    settlement_date: '2024-01-15',
+    transaction_id: 'txn-123',
+    card_holder: 'John Doe',
+    card_number: '************1111',
+    card_type: 'visa',
+    authorization: 'AUTH123',
+    captured: true,
+    created_at: '2024-01-15T10:30:00Z'
+  },
+  errors: [],
+  test: true
+}));
+
 // Simplified mock usePayment hook that avoids timing issues
 const createMockUsePayment = (defaultOptions: any = {}) => {
   return function usePayment(options: any = {}) {
@@ -46,7 +69,7 @@ const createMockUsePayment = (defaultOptions: any = {}) => {
           throw new Error('Payment failed');
         }
         
-        const response = createMockSuccessResponse();
+        const response = safeCreateMockSuccessResponse();
         setState(prev => ({ ...prev, loading: false, success: true }));
         
         if (mergedOptions.onSuccess) {
@@ -265,7 +288,7 @@ describe('usePayment', () => {
           if (attemptCount === 1) {
             throw new Error('First attempt failed');
           }
-          return createMockSuccessResponse();
+          return safeCreateMockSuccessResponse();
         }
       });
 

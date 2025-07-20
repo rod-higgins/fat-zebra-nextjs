@@ -1,5 +1,5 @@
 /**
- * Test Setup Configuration - Enhanced for Fat Zebra v0.4.8
+ * Test Setup Configuration - Enhanced for Fat Zebra v0.4.9
  * 
  * This setup file configures the testing environment while preserving all
  * existing functionality and adding improvements for test stability.
@@ -345,6 +345,52 @@ export const expectNoConsoleWarnings = () => {
   };
 };
 
+export const createMockSuccessResponse = (overrides = {}) => ({
+  successful: true,
+  response: {
+    id: 'txn-123',
+    amount: 2500,
+    currency: 'AUD',
+    reference: 'TEST-REF-123',
+    message: 'Approved',
+    successful: true,
+    settlement_date: '2024-01-15',
+    transaction_id: 'txn-123',
+    card_holder: 'John Doe',
+    card_number: '************1111',
+    card_type: 'visa',
+    authorization: 'AUTH123',
+    captured: true,
+    created_at: '2024-01-15T10:30:00Z',
+    ...overrides
+  },
+  errors: [],
+  test: true
+});
+
+export const createMockFailureResponse = (message = 'Transaction declined', overrides = {}) => ({
+  successful: false,
+  response: {
+    id: null,
+    amount: 2500,
+    currency: 'AUD',
+    reference: 'TEST-REF-123',
+    message,
+    successful: false,
+    settlement_date: null,
+    transaction_id: null,
+    card_holder: 'John Doe',
+    card_number: '************1111',
+    card_type: 'visa',
+    authorization: null,
+    captured: false,
+    created_at: '2024-01-15T10:30:00Z',
+    ...overrides
+  },
+  errors: [message],
+  test: true
+});
+
 export const waitForAsync = (ms: number = 0) => 
   new Promise(resolve => setTimeout(resolve, ms));
 
@@ -369,4 +415,4 @@ module.exports = {
 // Custom test timeout for async operations
 jest.setTimeout(10000);
 
-console.log('🧪 Test environment setup complete - Fat Zebra v0.4.8');
+console.log('🧪 Test environment setup complete - Fat Zebra v0.4.9');

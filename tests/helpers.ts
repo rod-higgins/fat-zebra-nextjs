@@ -8,6 +8,8 @@ const {
   mockFetchError: _mockFetchError,
   createMockPurchaseRequest: _createMockPurchaseRequest,
   createMockTransactionResponse: _createMockTransactionResponse,
+  createMockSuccessResponse: _createMockSuccessResponse,
+  createMockFailureResponse: _createMockFailureResponse,
   createMockErrorResponse: _createMockErrorResponse
 } = require('./setup');
 
@@ -24,6 +26,58 @@ export const createMockPurchaseRequest = (): PurchaseRequest => _createMockPurch
 
 export const createMockTransactionResponse = (): FatZebraResponse<TransactionResponse> => 
   _createMockTransactionResponse();
+
+// Add the missing functions with proper typing
+export const createMockSuccessResponse = (overrides: any = {}): FatZebraResponse<TransactionResponse> => 
+  _createMockSuccessResponse ? _createMockSuccessResponse(overrides) : ({
+    successful: true,
+    response: {
+      id: 'txn-123',
+      amount: 2500,
+      currency: 'AUD',
+      reference: 'TEST-REF-123',
+      message: 'Approved',
+      successful: true,
+      settlement_date: '2024-01-15',
+      transaction_id: 'txn-123',
+      card_holder: 'John Doe',
+      card_number: '************1111',
+      card_type: 'visa',
+      authorization: 'AUTH123',
+      captured: true,
+      created_at: '2024-01-15T10:30:00Z',
+      ...overrides
+    },
+    errors: [],
+    test: true
+  });
+
+export const createMockFailureResponse = (
+  message: string = 'Transaction declined', 
+  overrides: any = {}
+): FatZebraResponse => 
+  _createMockFailureResponse ? _createMockFailureResponse(message, overrides) : ({
+    successful: false,
+    response: {
+      id: null,
+      amount: 2500,
+      currency: 'AUD',
+      reference: 'TEST-REF-123',
+      message,
+      successful: false,
+      settlement_date: null,
+      transaction_id: null,
+      card_holder: 'John Doe',
+      card_number: '************1111',
+      card_type: 'visa',
+      authorization: null,
+      captured: false,
+      created_at: '2024-01-15T10:30:00Z',
+      ...overrides
+    },
+    errors: [message],
+    test: true
+  });
 
 export const createMockErrorResponse = (
   message: string = 'Test error', 
