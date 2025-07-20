@@ -36,7 +36,7 @@ export async function handleHealthCheck(request: StandaloneRequest): Promise<Sta
     return createResponse({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version || '0.5.1',
+      version: process.env.npm_package_version || '0.5.2',
       mode: 'standalone',
     });
   } catch (error) {
