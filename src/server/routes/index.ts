@@ -14,22 +14,34 @@ import type {
   VerificationHashData,
 } from '../../types';
 
-// Helper function to get client IP from request
+// Helper function to get client IP from request - FIXED TYPESCRIPT ERRORS
 function getClientIP(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  const realIP = request.headers.get('x-real-ip');
-  const cfConnectingIP = request.headers.get('cf-connecting-ip');
+  const headers = request.headers;
+
+  // Function to safely get header value regardless of header format
+  const getHeader = (name: string): string | undefined => {
+    if (typeof headers.get === 'function') {
+      const value = headers.get(name);
+      return value !== null ? value : undefined;
+    }
+    // Fallback for different header implementations
+    return (headers as any)[name];
+  };
+
+  const forwarded = getHeader('x-forwarded-for');
+  const realIP = getHeader('x-real-ip');
+  const cfConnectingIP = getHeader('cf-connecting-ip');
 
   if (forwarded) {
-    return forwarded.split(',')[0].trim();
+    return Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0].trim();
   }
 
   if (realIP) {
-    return realIP;
+    return Array.isArray(realIP) ? realIP[0] : realIP;
   }
 
   if (cfConnectingIP) {
-    return cfConnectingIP;
+    return Array.isArray(cfConnectingIP) ? cfConnectingIP[0] : cfConnectingIP;
   }
 
   return '127.0.0.1';
@@ -96,6 +108,16 @@ export async function handleAuthorization(request: NextRequest): Promise<NextRes
   try {
     const body: AuthorizationRequest = await request.json();
 
+    if (!body.amount || !body.card_number || !body.card_expiry || !body.cvv || !body.card_holder) {
+      return NextResponse.json(
+        {
+          successful: false,
+          errors: ['Missing required authorization fields'],
+        },
+        { status: 400 }
+      );
+    }
+
     const customerIp = getClientIP(request);
     const client = createFatZebraClient({
       username: process.env.FAT_ZEBRA_USERNAME!,
@@ -104,19 +126,31 @@ export async function handleAuthorization(request: NextRequest): Promise<NextRes
     });
 
     const authData: AuthorizationRequest = {
-      ...body,
       amount: Math.round(body.amount * 100),
+      currency: body.currency || 'AUD',
+      reference: body.reference || `AUTH-${Date.now()}`,
+      card_holder: body.card_holder,
+      card_number: body.card_number.replace(/\s/g, ''),
+      card_expiry: body.card_expiry,
+      cvv: body.cvv,
       customer_ip: customerIp,
-      capture: false,
+      ...(body.customer && { customer: body.customer }),
+      ...(body.metadata && { metadata: body.metadata }),
     };
 
     const response = await client.authorize(authData);
     return NextResponse.json(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Authorization error:', error);
     const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
+
     return NextResponse.json(
-      { successful: false, errors: [errorMessage] },
-      { status: error instanceof FatZebraError ? 400 : 500 }
+      {
+        successful: false,
+        errors: [errorMessage],
+      },
+      { status: statusCode }
     );
   }
 }
@@ -126,11 +160,14 @@ export async function handleAuthorization(request: NextRequest): Promise<NextRes
  */
 export async function handleCapture(request: NextRequest): Promise<NextResponse> {
   try {
-    const { transactionId, amount } = await request.json();
+    const body = await request.json();
 
-    if (!transactionId) {
+    if (!body.transaction_id) {
       return NextResponse.json(
-        { successful: false, errors: ['Transaction ID is required'] },
+        {
+          successful: false,
+          errors: ['Missing transaction_id'],
+        },
         { status: 400 }
       );
     }
@@ -141,13 +178,19 @@ export async function handleCapture(request: NextRequest): Promise<NextResponse>
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
-    const response = await client.capture(transactionId, amount);
+    const response = await client.capture(body.transaction_id, body.amount);
     return NextResponse.json(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Capture error:', error);
     const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
+
     return NextResponse.json(
-      { successful: false, errors: [errorMessage] },
-      { status: error instanceof FatZebraError ? 400 : 500 }
+      {
+        successful: false,
+        errors: [errorMessage],
+      },
+      { status: statusCode }
     );
   }
 }
@@ -159,9 +202,12 @@ export async function handleRefund(request: NextRequest): Promise<NextResponse> 
   try {
     const body: RefundRequest = await request.json();
 
-    if (!body.transaction_id) {
+    if (!body.transaction_id && !body.reference) {
       return NextResponse.json(
-        { successful: false, errors: ['Transaction ID is required'] },
+        {
+          successful: false,
+          errors: ['Either transaction_id or reference is required'],
+        },
         { status: 400 }
       );
     }
@@ -175,24 +221,33 @@ export async function handleRefund(request: NextRequest): Promise<NextResponse> 
     const response = await client.refund(body);
     return NextResponse.json(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Refund error:', error);
     const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
+
     return NextResponse.json(
-      { successful: false, errors: [errorMessage] },
-      { status: error instanceof FatZebraError ? 400 : 500 }
+      {
+        successful: false,
+        errors: [errorMessage],
+      },
+      { status: statusCode }
     );
   }
 }
 
 /**
- * Tokenization handler
+ * Tokenization handler - FIXED to match TokenizationRequest interface
  */
 export async function handleTokenization(request: NextRequest): Promise<NextResponse> {
   try {
-    const body: TokenizationRequest = await request.json();
+    const body = await request.json();
 
     if (!body.card_number || !body.card_expiry || !body.card_holder) {
       return NextResponse.json(
-        { successful: false, errors: ['Missing required card fields'] },
+        {
+          successful: false,
+          errors: ['Missing required card fields'],
+        },
         { status: 400 }
       );
     }
@@ -203,13 +258,27 @@ export async function handleTokenization(request: NextRequest): Promise<NextResp
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
-    const response = await client.tokenize(body);
+    // FIXED: Only using properties that exist in TokenizationRequest interface
+    const tokenData: TokenizationRequest = {
+      card_holder: body.card_holder,
+      card_number: body.card_number.replace(/\s/g, ''),
+      card_expiry: body.card_expiry,
+      ...(body.cvv && { cvv: body.cvv }),
+    };
+
+    const response = await client.tokenize(tokenData);
     return NextResponse.json(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Tokenization error:', error);
     const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
+
     return NextResponse.json(
-      { successful: false, errors: [errorMessage] },
-      { status: error instanceof FatZebraError ? 400 : 500 }
+      {
+        successful: false,
+        errors: [errorMessage],
+      },
+      { status: statusCode }
     );
   }
 }
@@ -219,11 +288,14 @@ export async function handleTokenization(request: NextRequest): Promise<NextResp
  */
 export async function handleVoid(request: NextRequest): Promise<NextResponse> {
   try {
-    const { transactionId } = await request.json();
+    const body = await request.json();
 
-    if (!transactionId) {
+    if (!body.transaction_id) {
       return NextResponse.json(
-        { successful: false, errors: ['Transaction ID is required'] },
+        {
+          successful: false,
+          errors: ['Missing transaction_id'],
+        },
         { status: 400 }
       );
     }
@@ -234,13 +306,19 @@ export async function handleVoid(request: NextRequest): Promise<NextResponse> {
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
-    const response = await client.void(transactionId);
+    const response = await client.void(body.transaction_id);
     return NextResponse.json(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Void error:', error);
     const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
+
     return NextResponse.json(
-      { successful: false, errors: [errorMessage] },
-      { status: error instanceof FatZebraError ? 400 : 500 }
+      {
+        successful: false,
+        errors: [errorMessage],
+      },
+      { status: statusCode }
     );
   }
 }
@@ -250,12 +328,17 @@ export async function handleVoid(request: NextRequest): Promise<NextResponse> {
  */
 export async function handleTransactionStatus(request: NextRequest): Promise<NextResponse> {
   try {
+    // Extract transaction ID from URL path
     const url = new URL(request.url);
-    const transactionId = url.searchParams.get('id');
+    const pathParts = url.pathname.split('/');
+    const transactionId = pathParts[pathParts.length - 1];
 
     if (!transactionId) {
       return NextResponse.json(
-        { successful: false, errors: ['Transaction ID is required'] },
+        {
+          successful: false,
+          errors: ['Missing transaction_id in URL'],
+        },
         { status: 400 }
       );
     }
@@ -269,21 +352,36 @@ export async function handleTransactionStatus(request: NextRequest): Promise<Nex
     const response = await client.getTransaction(transactionId);
     return NextResponse.json(handleFatZebraResponse(response));
   } catch (error) {
+    console.error('Transaction status error:', error);
     const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
+
     return NextResponse.json(
-      { successful: false, errors: [errorMessage] },
-      { status: error instanceof FatZebraError ? 400 : 500 }
+      {
+        successful: false,
+        errors: [errorMessage],
+      },
+      { status: statusCode }
     );
   }
 }
 
 /**
- * Webhook verification handler
+ * Webhook verification handler - FIXED TYPESCRIPT ERRORS
  */
 export async function handleVerifyWebhook(request: NextRequest): Promise<NextResponse> {
   try {
-    // Note: Removed unused 'body' variable declaration
-    const signature = request.headers.get('x-webhook-signature');
+    // Helper function to safely get header value
+    const getHeader = (name: string): string | undefined => {
+      if (typeof request.headers.get === 'function') {
+        const value = request.headers.get(name);
+        return value !== null ? value : undefined;
+      }
+      // Fallback for different header implementations
+      return (request.headers as any)[name];
+    };
+
+    const signature = getHeader('x-webhook-signature');
 
     if (!signature) {
       return NextResponse.json(
@@ -339,7 +437,7 @@ export async function handleHealthCheck(): Promise<NextResponse> {
     successful: true,
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    version: '0.3.0',
+    version: '0.4.2',
   });
 }
 

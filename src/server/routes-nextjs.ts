@@ -5,20 +5,17 @@
  */
 
 // Conditional imports - only import when Next.js is available
-let NextRequest: any;
 let NextResponse: any;
 
 try {
   if (typeof require !== 'undefined') {
     const nextServer = require('next/server');
-    NextRequest = nextServer.NextRequest;
     NextResponse = nextServer.NextResponse;
   } else {
     throw new Error('require not available');
   }
 } catch (error) {
   // Next.js not available - create placeholder types
-  NextRequest = class MockNextRequest {};
   NextResponse = {
     json: (data: any, init?: any) => ({
       status: init?.status || 200,
@@ -108,7 +105,7 @@ export async function handleHealthCheck(request: any): Promise<any> {
 }
 
 /**
- * Process a purchase transaction with Next.js
+ * Process a purchase transaction
  */
 export async function handlePurchase(request: any): Promise<any> {
   try {
@@ -118,9 +115,12 @@ export async function handlePurchase(request: any): Promise<any> {
 
     const body: PurchaseRequest = await request.json();
 
-    if (!body.amount || !body.currency) {
+    if (!body.amount || !body.card_number || !body.card_expiry || !body.cvv || !body.card_holder) {
       return createNextResponse(
-        { successful: false, errors: ['Missing required fields: amount, currency'] },
+        {
+          successful: false,
+          errors: ['Missing required payment fields'],
+        },
         400
       );
     }
@@ -131,34 +131,38 @@ export async function handlePurchase(request: any): Promise<any> {
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
-    const response = await client.purchase(body);
+    const purchaseData: PurchaseRequest = {
+      amount: Math.round(body.amount * 100),
+      currency: body.currency || 'AUD',
+      reference: body.reference || `TXN-${Date.now()}`,
+      card_holder: body.card_holder,
+      card_number: body.card_number.replace(/\s/g, ''),
+      card_expiry: body.card_expiry,
+      cvv: body.cvv,
+      customer_ip: '127.0.0.1', // Default for edge runtime
+      ...(body.customer && { customer: body.customer }),
+      ...(body.metadata && { metadata: body.metadata }),
+    };
+
+    const response = await client.purchase(purchaseData);
     return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
     console.error('Purchase error:', error);
-
-    if (error instanceof FatZebraError) {
-      return createNextResponse(
-        {
-          successful: false,
-          error: error.message,
-          details: error.errors,
-        },
-        400
-      );
-    }
+    const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
 
     return createNextResponse(
       {
         successful: false,
-        error: extractErrorMessage(error),
+        errors: [errorMessage],
       },
-      500
+      statusCode
     );
   }
 }
 
 /**
- * Process an authorization transaction with Next.js
+ * Process an authorization transaction
  */
 export async function handleAuthorization(request: any): Promise<any> {
   try {
@@ -168,9 +172,12 @@ export async function handleAuthorization(request: any): Promise<any> {
 
     const body: AuthorizationRequest = await request.json();
 
-    if (!body.amount || !body.currency || !body.card_number) {
+    if (!body.amount || !body.card_number || !body.card_expiry || !body.cvv || !body.card_holder) {
       return createNextResponse(
-        { successful: false, errors: ['Missing required fields: amount, currency, card_number'] },
+        {
+          successful: false,
+          errors: ['Missing required authorization fields'],
+        },
         400
       );
     }
@@ -181,34 +188,38 @@ export async function handleAuthorization(request: any): Promise<any> {
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
-    const response = await client.authorize(body);
+    const authData: AuthorizationRequest = {
+      amount: Math.round(body.amount * 100),
+      currency: body.currency || 'AUD',
+      reference: body.reference || `AUTH-${Date.now()}`,
+      card_holder: body.card_holder,
+      card_number: body.card_number.replace(/\s/g, ''),
+      card_expiry: body.card_expiry,
+      cvv: body.cvv,
+      customer_ip: '127.0.0.1',
+      ...(body.customer && { customer: body.customer }),
+      ...(body.metadata && { metadata: body.metadata }),
+    };
+
+    const response = await client.authorize(authData);
     return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
     console.error('Authorization error:', error);
-
-    if (error instanceof FatZebraError) {
-      return createNextResponse(
-        {
-          successful: false,
-          error: error.message,
-          details: error.errors,
-        },
-        400
-      );
-    }
+    const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
 
     return createNextResponse(
       {
         successful: false,
-        error: extractErrorMessage(error),
+        errors: [errorMessage],
       },
-      500
+      statusCode
     );
   }
 }
 
 /**
- * Capture an authorized transaction with Next.js
+ * Process a capture transaction
  */
 export async function handleCapture(request: any): Promise<any> {
   try {
@@ -217,11 +228,13 @@ export async function handleCapture(request: any): Promise<any> {
     }
 
     const body = await request.json();
-    const { transactionId, amount } = body;
 
-    if (!transactionId) {
+    if (!body.transaction_id) {
       return createNextResponse(
-        { successful: false, errors: ['Missing required field: transactionId'] },
+        {
+          successful: false,
+          errors: ['Missing transaction_id'],
+        },
         400
       );
     }
@@ -232,34 +245,25 @@ export async function handleCapture(request: any): Promise<any> {
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
-    const response = await client.capture(transactionId, amount);
+    const response = await client.capture(body.transaction_id, body.amount);
     return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
     console.error('Capture error:', error);
-
-    if (error instanceof FatZebraError) {
-      return createNextResponse(
-        {
-          successful: false,
-          error: error.message,
-          details: error.errors,
-        },
-        400
-      );
-    }
+    const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
 
     return createNextResponse(
       {
         successful: false,
-        error: extractErrorMessage(error),
+        errors: [errorMessage],
       },
-      500
+      statusCode
     );
   }
 }
 
 /**
- * Process a refund transaction with Next.js
+ * Process a refund transaction
  */
 export async function handleRefund(request: any): Promise<any> {
   try {
@@ -269,9 +273,12 @@ export async function handleRefund(request: any): Promise<any> {
 
     const body: RefundRequest = await request.json();
 
-    if (!body.transaction_id) {
+    if (!body.transaction_id && !body.reference) {
       return createNextResponse(
-        { successful: false, errors: ['Missing required field: transaction_id'] },
+        {
+          successful: false,
+          errors: ['Either transaction_id or reference is required'],
+        },
         400
       );
     }
@@ -286,30 +293,21 @@ export async function handleRefund(request: any): Promise<any> {
     return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
     console.error('Refund error:', error);
-
-    if (error instanceof FatZebraError) {
-      return createNextResponse(
-        {
-          successful: false,
-          error: error.message,
-          details: error.errors,
-        },
-        400
-      );
-    }
+    const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
 
     return createNextResponse(
       {
         successful: false,
-        error: extractErrorMessage(error),
+        errors: [errorMessage],
       },
-      500
+      statusCode
     );
   }
 }
 
 /**
- * Process a tokenization request with Next.js
+ * Process a tokenization request
  */
 export async function handleTokenization(request: any): Promise<any> {
   try {
@@ -321,7 +319,10 @@ export async function handleTokenization(request: any): Promise<any> {
 
     if (!body.card_number || !body.card_expiry || !body.card_holder) {
       return createNextResponse(
-        { successful: false, errors: ['Missing required card fields'] },
+        {
+          successful: false,
+          errors: ['Missing required card fields'],
+        },
         400
       );
     }
@@ -332,34 +333,32 @@ export async function handleTokenization(request: any): Promise<any> {
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
-    const response = await client.tokenize(body);
+    const tokenData: TokenizationRequest = {
+      card_holder: body.card_holder,
+      card_number: body.card_number.replace(/\s/g, ''),
+      card_expiry: body.card_expiry,
+      ...(body.cvv && { cvv: body.cvv }),
+    };
+
+    const response = await client.tokenize(tokenData);
     return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
     console.error('Tokenization error:', error);
-
-    if (error instanceof FatZebraError) {
-      return createNextResponse(
-        {
-          successful: false,
-          error: error.message,
-          details: error.errors,
-        },
-        400
-      );
-    }
+    const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
 
     return createNextResponse(
       {
         successful: false,
-        error: extractErrorMessage(error),
+        errors: [errorMessage],
       },
-      500
+      statusCode
     );
   }
 }
 
 /**
- * Void a transaction with Next.js
+ * Void a transaction
  */
 export async function handleVoid(request: any): Promise<any> {
   try {
@@ -368,11 +367,13 @@ export async function handleVoid(request: any): Promise<any> {
     }
 
     const body = await request.json();
-    const { transactionId } = body;
 
-    if (!transactionId) {
+    if (!body.transaction_id) {
       return createNextResponse(
-        { successful: false, errors: ['Missing required field: transactionId'] },
+        {
+          successful: false,
+          errors: ['Missing transaction_id'],
+        },
         400
       );
     }
@@ -383,34 +384,25 @@ export async function handleVoid(request: any): Promise<any> {
       sandbox: process.env.NODE_ENV !== 'production',
     });
 
-    const response = await client.void(transactionId);
+    const response = await client.void(body.transaction_id);
     return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
     console.error('Void error:', error);
-
-    if (error instanceof FatZebraError) {
-      return createNextResponse(
-        {
-          successful: false,
-          error: error.message,
-          details: error.errors,
-        },
-        400
-      );
-    }
+    const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
 
     return createNextResponse(
       {
         successful: false,
-        error: extractErrorMessage(error),
+        errors: [errorMessage],
       },
-      500
+      statusCode
     );
   }
 }
 
 /**
- * Get transaction status with Next.js
+ * Get transaction status
  */
 export async function handleTransactionStatus(request: any): Promise<any> {
   try {
@@ -418,11 +410,19 @@ export async function handleTransactionStatus(request: any): Promise<any> {
       return createNextResponse({ error: 'Method not allowed' }, 405);
     }
 
+    // Extract transaction ID from URL path
     const url = new URL(request.url);
-    const transactionId = url.searchParams.get('id');
+    const pathParts = url.pathname.split('/');
+    const transactionId = pathParts[pathParts.length - 1];
 
     if (!transactionId) {
-      return createNextResponse({ successful: false, errors: ['Missing transaction ID'] }, 400);
+      return createNextResponse(
+        {
+          successful: false,
+          errors: ['Missing transaction_id in URL'],
+        },
+        400
+      );
     }
 
     const client = createFatZebraClient({
@@ -435,30 +435,21 @@ export async function handleTransactionStatus(request: any): Promise<any> {
     return createNextResponse(handleFatZebraResponse(response));
   } catch (error) {
     console.error('Transaction status error:', error);
-
-    if (error instanceof FatZebraError) {
-      return createNextResponse(
-        {
-          successful: false,
-          error: error.message,
-          details: error.errors,
-        },
-        400
-      );
-    }
+    const errorMessage = extractErrorMessage(error);
+    const statusCode = error instanceof FatZebraError ? 400 : 500;
 
     return createNextResponse(
       {
         successful: false,
-        error: extractErrorMessage(error),
+        errors: [errorMessage],
       },
-      500
+      statusCode
     );
   }
 }
 
 /**
- * Verify webhook with Next.js
+ * Verify webhook signature and process webhook event
  */
 export async function handleVerifyWebhook(request: any): Promise<any> {
   try {
@@ -467,48 +458,41 @@ export async function handleVerifyWebhook(request: any): Promise<any> {
     }
 
     const body = await request.text();
-    const signature = request.headers.get?.('x-fz-signature') || request.headers['x-fz-signature'];
+    const signature =
+      request.headers.get?.('x-webhook-signature') || request.headers['x-webhook-signature'];
 
     if (!signature) {
       return createNextResponse({ successful: false, errors: ['Missing webhook signature'] }, 400);
     }
 
-    const sharedSecret = process.env.FAT_ZEBRA_SHARED_SECRET;
-    if (!sharedSecret) {
+    const secret = process.env.FAT_ZEBRA_SHARED_SECRET;
+    if (!secret) {
       return createNextResponse(
-        { successful: false, errors: ['Shared secret not configured'] },
+        { successful: false, errors: ['Webhook secret not configured'] },
         500
       );
     }
 
-    const isValid = verifyWebhookSignature(body, signature, sharedSecret);
-
+    const isValid = verifyWebhookSignature(body, signature, secret);
     if (!isValid) {
       return createNextResponse({ successful: false, errors: ['Invalid webhook signature'] }, 401);
     }
 
-    const webhookData: WebhookEvent = JSON.parse(body);
-
+    const webhookEvent: WebhookEvent = JSON.parse(body);
     return createNextResponse({
       successful: true,
       verified: true,
-      event: webhookData,
+      event: webhookEvent,
     });
   } catch (error) {
     console.error('Webhook verification error:', error);
-
-    return createNextResponse(
-      {
-        successful: false,
-        error: extractErrorMessage(error),
-      },
-      500
-    );
+    const errorMessage = extractErrorMessage(error);
+    return createNextResponse({ successful: false, errors: [errorMessage] }, 500);
   }
 }
 
 /**
- * Generate verification hash with Next.js
+ * Generate verification hash
  */
 export async function handleGenerateHash(request: any): Promise<any> {
   try {
@@ -517,115 +501,20 @@ export async function handleGenerateHash(request: any): Promise<any> {
     }
 
     const body = await request.json();
-    const { reference, amount, currency, timestamp } = body;
 
-    if (!reference || amount === undefined || !currency) {
-      return createNextResponse(
-        { successful: false, errors: ['Missing required fields: reference, amount, currency'] },
-        400
-      );
+    if (!body.amount || !body.currency || !body.reference || !body.timestamp) {
+      return createNextResponse({ successful: false, errors: ['Missing required hash data'] }, 400);
     }
 
-    const sharedSecret = process.env.FAT_ZEBRA_SHARED_SECRET;
-    if (!sharedSecret) {
-      return createNextResponse(
-        { successful: false, errors: ['Shared secret not configured'] },
-        500
-      );
-    }
-
-    const hashData = {
-      reference,
-      amount,
-      currency,
-      timestamp: timestamp || Date.now(),
-    };
-
-    const hash = generateVerificationHash(hashData, sharedSecret);
+    const secret = process.env.FAT_ZEBRA_SHARED_SECRET || 'default-secret';
+    const hash = generateVerificationHash(body, secret);
 
     return createNextResponse({
       successful: true,
       hash,
-      reference,
-      amount,
-      currency,
     });
   } catch (error) {
-    console.error('Hash generation error:', error);
-
-    return createNextResponse(
-      {
-        successful: false,
-        error: extractErrorMessage(error),
-      },
-      500
-    );
-  }
-}
-
-/**
- * Enhanced webhook handler with database integration (Next.js specific)
- */
-export async function handleEnhancedWebhook(request: any): Promise<any> {
-  try {
-    if (request.method !== 'POST') {
-      return createNextResponse({ error: 'Method not allowed' }, 405);
-    }
-
-    const body = await request.text();
-    const signature = request.headers.get?.('x-fz-signature') || request.headers['x-fz-signature'];
-
-    if (!signature) {
-      return createNextResponse({ successful: false, errors: ['Missing webhook signature'] }, 400);
-    }
-
-    const sharedSecret = process.env.FAT_ZEBRA_SHARED_SECRET;
-    if (!sharedSecret) {
-      return createNextResponse(
-        { successful: false, errors: ['Shared secret not configured'] },
-        500
-      );
-    }
-
-    const isValid = verifyWebhookSignature(body, signature, sharedSecret);
-
-    if (!isValid) {
-      return createNextResponse({ successful: false, errors: ['Invalid webhook signature'] }, 401);
-    }
-
-    const webhookData: WebhookEvent = JSON.parse(body);
-
-    // Extract the appropriate identifier based on the response type
-    let transactionId: string | undefined;
-    const responseObject = webhookData.data.object;
-
-    if ('id' in responseObject) {
-      // TransactionResponse or SettlementResponse
-      transactionId = responseObject.id;
-    } else if ('token' in responseObject) {
-      // TokenizationResponse
-      transactionId = responseObject.token;
-    }
-
-    // Here you would typically update your database
-    // Example: await updatePaymentStatus(webhookData);
-
-    return createNextResponse({
-      successful: true,
-      verified: true,
-      processed: true,
-      event_type: webhookData.type,
-      transaction_id: transactionId,
-    });
-  } catch (error) {
-    console.error('Enhanced webhook error:', error);
-
-    return createNextResponse(
-      {
-        successful: false,
-        error: extractErrorMessage(error),
-      },
-      500
-    );
+    const errorMessage = extractErrorMessage(error);
+    return createNextResponse({ successful: false, errors: [errorMessage] }, 500);
   }
 }

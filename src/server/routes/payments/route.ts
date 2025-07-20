@@ -3,23 +3,34 @@ import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../
 import { validateCard, extractErrorMessage } from '../../../utils';
 import type { PurchaseRequest } from '../../../types';
 
-// Helper function to get client IP from request
+// Helper function to get client IP from request - FIXED TYPESCRIPT ERRORS
 function getClientIP(request: NextRequest): string {
-  // Try various headers for the real IP
-  const forwarded = request.headers.get('x-forwarded-for');
-  const realIP = request.headers.get('x-real-ip');
-  const cfConnectingIP = request.headers.get('cf-connecting-ip');
+  const headers = request.headers;
+
+  // Function to safely get header value regardless of header format
+  const getHeader = (name: string): string | undefined => {
+    if (typeof headers.get === 'function') {
+      const value = headers.get(name);
+      return value !== null ? value : undefined;
+    }
+    // Fallback for different header implementations
+    return (headers as any)[name];
+  };
+
+  const forwarded = getHeader('x-forwarded-for');
+  const realIP = getHeader('x-real-ip');
+  const cfConnectingIP = getHeader('cf-connecting-ip');
 
   if (forwarded) {
-    return forwarded.split(',')[0].trim();
+    return Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0].trim();
   }
 
   if (realIP) {
-    return realIP;
+    return Array.isArray(realIP) ? realIP[0] : realIP;
   }
 
   if (cfConnectingIP) {
-    return cfConnectingIP;
+    return Array.isArray(cfConnectingIP) ? cfConnectingIP[0] : cfConnectingIP;
   }
 
   // Fallback to a default IP for development
@@ -101,11 +112,4 @@ export async function POST(request: NextRequest) {
       { status: statusCode }
     );
   }
-}
-
-export async function GET() {
-  return NextResponse.json(
-    { message: 'Fat Zebra Payment API - Use POST for transactions' },
-    { status: 200 }
-  );
 }

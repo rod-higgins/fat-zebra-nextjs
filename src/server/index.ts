@@ -159,49 +159,67 @@ export function getRouteHandlers() {
   };
 }
 
-// Standalone HTTP server wrapper for non-Next.js environments
-export function createStandaloneServer(handlers: Record<string, any>) {
-  return (req: any, res: any) => {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const path = url.pathname;
-    const method = req.method;
-
-    // Simple routing based on path
-    let handler: any = null;
-
-    if (path.startsWith('/api/payments') && method === 'POST') {
-      handler = handlers.purchase;
-    } else if (path.startsWith('/api/auth') && method === 'POST') {
-      handler = handlers.authorization;
-    } else if (path.startsWith('/api/refunds') && method === 'POST') {
-      handler = handlers.refund;
-    } else if (path.startsWith('/api/tokenize') && method === 'POST') {
-      handler = handlers.tokenization;
-    } else if (path.startsWith('/api/health') && method === 'GET') {
-      handler = handlers.healthCheck;
-    }
-
-    if (!handler) {
-      res.statusCode = 404;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: 'Not found' }));
-      return;
-    }
-
+// Express.js/standalone HTTP server support
+export function createExpressHandler(handler: any) {
+  return async (req: any, res: any) => {
     try {
-      // Collect request body
       let body = '';
-      req.on('data', (chunk: any) => {
-        body += chunk.toString();
-      });
+      if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+        // Read request body for non-GET requests
+        req.on('data', (chunk: any) => {
+          body += chunk.toString();
+        });
 
-      req.on('end', async () => {
+        req.on('end', async () => {
+          try {
+            // Create request object
+            const request = {
+              method: req.method,
+              url: req.url,
+              headers: req.headers,
+              body: body,
+              json: () => (body ? JSON.parse(body) : null),
+            };
+
+            const response = await handler(request);
+
+            // Convert our response to HTTP format
+            if (response && typeof response === 'object') {
+              if (response.status) {
+                res.statusCode = response.status;
+              }
+              if (response.headers) {
+                Object.entries(response.headers).forEach(([key, value]) => {
+                  res.setHeader(key, value as string);
+                });
+              }
+              res.setHeader('Content-Type', 'application/json');
+              res.end(response.body || JSON.stringify(response));
+            } else {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(response));
+            }
+          } catch (parseError) {
+            console.error('Request parsing error:', parseError);
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(
+              JSON.stringify({
+                successful: false,
+                errors: ['Invalid request format'],
+              })
+            );
+          }
+        });
+      } else {
+        // Handle GET requests
         try {
           const request = {
-            method,
+            method: req.method,
             url: req.url,
             headers: req.headers,
-            body: body ? JSON.parse(body) : null,
+            body: null,
+            json: () => Promise.resolve(null),
           };
 
           const response = await handler(request);
@@ -233,7 +251,7 @@ export function createStandaloneServer(handlers: Record<string, any>) {
             })
           );
         }
-      });
+      }
     } catch (error) {
       console.error('Handler error:', error);
       res.statusCode = 500;
@@ -323,10 +341,11 @@ export async function generateAccessToken(request: any): Promise<any> {
     };
   } catch (error) {
     console.error('OAuth token generation error:', error);
+    const errorMessage = extractErrorMessage(error);
 
     const response = {
       successful: false,
-      errors: [extractErrorMessage(error)], // FIXED: Now this function is properly imported
+      errors: [errorMessage],
     };
 
     if (checkNextJSAvailability()) {
@@ -344,8 +363,8 @@ export async function generateAccessToken(request: any): Promise<any> {
   }
 }
 
-// Enhanced verification hash generation
-export async function generateVerificationHashRoute(request: any): Promise<any> {
+// Verification hash generation handler that works in both environments
+export async function generateVerificationHashHandler(request: any): Promise<any> {
   try {
     const method = request.method || 'POST';
     if (method !== 'POST') {
@@ -369,12 +388,11 @@ export async function generateVerificationHashRoute(request: any): Promise<any> 
     }
 
     const body = await request.json();
-    const { reference, amount, currency } = body;
 
-    if (!reference || amount === undefined || !currency) {
+    if (!body.amount || !body.currency || !body.reference || !body.timestamp) {
       const response = {
         successful: false,
-        errors: ['Missing required fields: reference, amount, currency'],
+        errors: ['Missing required hash data'],
       };
 
       if (checkNextJSAvailability()) {
@@ -391,42 +409,33 @@ export async function generateVerificationHashRoute(request: any): Promise<any> 
       };
     }
 
-    const hash = generateVerificationHash(
-      {
-        reference,
-        amount,
-        currency,
-        timestamp: Date.now(),
-      },
-      process.env.FAT_ZEBRA_SHARED_SECRET || ''
-    );
+    const secret = process.env.FAT_ZEBRA_SHARED_SECRET || 'default-secret';
+    const hash = generateVerificationHash(body, secret);
 
-    const responseData = {
+    const response = {
       successful: true,
       hash,
-      reference,
-      amount,
-      currency,
     };
 
     if (checkNextJSAvailability()) {
       if (typeof require !== 'undefined') {
         const { NextResponse } = require('next/server');
-        return NextResponse.json(responseData);
+        return NextResponse.json(response);
       }
     }
 
     return {
       status: 200,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(responseData),
+      body: JSON.stringify(response),
     };
   } catch (error) {
     console.error('Hash generation error:', error);
+    const errorMessage = extractErrorMessage(error);
 
     const response = {
       successful: false,
-      errors: [extractErrorMessage(error)], // FIXED: Now this function is properly imported
+      errors: [errorMessage],
     };
 
     if (checkNextJSAvailability()) {
