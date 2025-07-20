@@ -19,13 +19,6 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "./dist",
-    "removeComments": false,
-    "incremental": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo",
     
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -57,11 +50,8 @@
     
     "skipDefaultLibCheck": true,
     "useDefineForClassFields": true,
-    
-    // Allow optional imports that might not exist
     "moduleDetection": "auto",
     
-    // Include Node.js types
     "typeRoots": ["./node_modules/@types", "./src/types"],
     "types": ["node", "jest"]
   },
