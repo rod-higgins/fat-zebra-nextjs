@@ -13,6 +13,7 @@ dist/
 build/
 build.log
 test.log
+testcoverage.log
 
 # Environment variables
 .env

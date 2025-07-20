@@ -6,24 +6,26 @@ module.exports = {
   // Setup files
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   
-  // Module path mapping
-  moduleNameMapping: {
+  // Module path mapping (FIXED: was moduleNameMapping)
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@/components/(.*)$': '<rootDir>/src/components/$1',
     '^@/hooks/(.*)$': '<rootDir>/src/hooks/$1',
     '^@/lib/(.*)$': '<rootDir>/src/lib/$1',
     '^@/utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@/types/(.*)$': '<rootDir>/src/types/$1',
-    '^@/server/(.*)$': '<rootDir>/src/server/$1'
+    '^@/server/(.*)$': '<rootDir>/src/server/$1',
+    // Module mocking for optional dependencies
+    '^next/server$': '<rootDir>/tests/__mocks__/next-server.js'
   },
   
-  // Transform configuration
+  // Transform configuration (FIXED: moved ts-jest config here from globals)
   transform: {
     '^.+\\.(ts|tsx)$': [
       'ts-jest',
       {
-        tsconfig: 'tsconfig.json',
-        isolatedModules: true
+        tsconfig: 'tsconfig.json'
+        // REMOVED: isolatedModules (deprecated, should be in tsconfig.json)
       }
     ]
   },
@@ -60,23 +62,7 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   coverageDirectory: 'coverage',
   
-  // Module mocking for optional dependencies
-  moduleNameMapping: {
-    '^next/server$': '<rootDir>/tests/__mocks__/next-server.js'
-  },
-  
-  // Global setup
-  globals: {
-    'ts-jest': {
-      isolatedModules: true,
-      tsconfig: {
-        jsx: 'react-jsx',
-        esModuleInterop: true,
-        allowSyntheticDefaultImports: true,
-        skipLibCheck: true
-      }
-    }
-  },
+  // REMOVED: globals configuration (deprecated)
   
   // Timeout settings
   testTimeout: 10000,

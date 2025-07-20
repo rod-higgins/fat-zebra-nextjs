@@ -10,7 +10,7 @@ const {
   createMockErrorResponse
 } = require('../setup');
 
-// Mock the useOAuthPayment hook since it might not exist yet
+// Mock the useOAuthPayment hook implementation directly (no import needed)
 const mockUseOAuthPayment = (accessToken: string, username: string, options?: any) => {
   return {
     loading: false,
@@ -24,10 +24,7 @@ const mockUseOAuthPayment = (accessToken: string, username: string, options?: an
   };
 };
 
-// Mock the hook module
-jest.mock('../../src/hooks/useOAuthPayment', () => ({
-  useOAuthPayment: mockUseOAuthPayment
-}));
+// REMOVED: jest.mock() that was causing the import error
 
 describe('useOAuthPayment Hook', () => {
   beforeEach(() => {

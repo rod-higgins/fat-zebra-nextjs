@@ -100,6 +100,24 @@ export class FatZebraClient {
   }
 
   /**
+   * Create a timeout signal that's compatible with older Node.js versions
+   */
+  private createTimeoutSignal(timeoutMs: number): AbortSignal {
+    // Try to use AbortSignal.timeout if available (Node.js 16.14.0+)
+    if (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal) {
+      return (AbortSignal as any).timeout(timeoutMs);
+    }
+
+    // Fallback for older Node.js versions or Jest environments
+    const controller = new AbortController();
+    setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+
+    return controller.signal;
+  }
+
+  /**
    * Make HTTP request to Fat Zebra API
    */
   private async makeRequest<T>(
@@ -114,13 +132,13 @@ export class FatZebraClient {
       Authorization: `Basic ${Buffer.from(`${this.config.username}:${this.config.token}`).toString(
         'base64'
       )}`,
-      'User-Agent': 'FatZebra Next.js v0.2.2',
+      'User-Agent': 'FatZebra Next.js v0.4.5',
     };
 
     const requestOptions: RequestInit = {
       method,
       headers,
-      signal: AbortSignal.timeout(this.config.timeout),
+      signal: this.createTimeoutSignal(this.config.timeout),
     };
 
     if (data && method !== 'GET') {
