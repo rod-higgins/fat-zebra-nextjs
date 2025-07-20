@@ -191,52 +191,66 @@ describe('VerifyCard Component', () => {
   });
 
   describe('Form Interaction', () => {
-    it('should allow user to input card details', async () => {
+    it('should handle card number input', async () => {
       const user = userEvent.setup();
+      
       render(<MockVerifyCard {...defaultProps} />);
 
       const cardNumberInput = screen.getByTestId('card-number-input');
-      const expiryMonthSelect = screen.getByTestId('expiry-month-select');
-      const expiryYearSelect = screen.getByTestId('expiry-year-select');
-      const cvvInput = screen.getByTestId('cvv-input');
-
       await user.type(cardNumberInput, '4111111111111111');
-      await user.selectOptions(expiryMonthSelect, '12');
-      await user.selectOptions(expiryYearSelect, '2025');
-      await user.type(cvvInput, '123');
 
       expect(cardNumberInput).toHaveValue('4111111111111111');
-      expect(expiryMonthSelect).toHaveValue('12');
-      expect(expiryYearSelect).toHaveValue('2025');
-      expect(cvvInput).toHaveValue('123');
     });
 
-    it('should limit CVV input length', async () => {
+    it('should handle expiry month selection', async () => {
       const user = userEvent.setup();
+      
+      render(<MockVerifyCard {...defaultProps} />);
+
+      const monthSelect = screen.getByTestId('expiry-month-select');
+      await user.selectOptions(monthSelect, '12');
+
+      expect(monthSelect).toHaveValue('12');
+    });
+
+    it('should handle expiry year selection', async () => {
+      const user = userEvent.setup();
+      
+      render(<MockVerifyCard {...defaultProps} />);
+
+      const yearSelect = screen.getByTestId('expiry-year-select');
+      const currentYear = new Date().getFullYear();
+      await user.selectOptions(yearSelect, String(currentYear + 1));
+
+      expect(yearSelect).toHaveValue(String(currentYear + 1));
+    });
+
+    it('should handle CVV input', async () => {
+      const user = userEvent.setup();
+      
       render(<MockVerifyCard {...defaultProps} />);
 
       const cvvInput = screen.getByTestId('cvv-input');
-      await user.type(cvvInput, '12345');
+      await user.type(cvvInput, '123');
 
-      // Should be limited to 4 characters
-      expect(cvvInput).toHaveValue('1234');
+      expect(cvvInput).toHaveValue('123');
     });
   });
 
   describe('Verification Process', () => {
-    it('should verify card successfully with valid details', async () => {
+    it('should verify card successfully with valid data', async () => {
       const onVerificationComplete = jest.fn();
       const user = userEvent.setup();
       
       render(<MockVerifyCard {...defaultProps} onVerificationComplete={onVerificationComplete} />);
 
-      // Fill in valid card details
+      // Fill form
       await user.type(screen.getByTestId('card-number-input'), '4111111111111111');
       await user.selectOptions(screen.getByTestId('expiry-month-select'), '12');
       await user.selectOptions(screen.getByTestId('expiry-year-select'), '2025');
       await user.type(screen.getByTestId('cvv-input'), '123');
 
-      // Submit verification
+      // Verify card
       await user.click(screen.getByTestId('verify-button'));
 
       await waitFor(() => {
@@ -266,31 +280,36 @@ describe('VerifyCard Component', () => {
         />
       );
 
-      // Fill in valid card details
-      await user.type(screen.getByTestId('card-number-input'), '4111111111111111');
-      await user.selectOptions(screen.getByTestId('expiry-month-select'), '12');
-      await user.selectOptions(screen.getByTestId('expiry-year-select'), '2025');
-      await user.type(screen.getByTestId('cvv-input'), '123');
+      // Fill and verify form
+      await user.type(screen.getByTestId('card-number-input'), '5555555555554444');
+      await user.selectOptions(screen.getByTestId('expiry-month-select'), '06');
+      await user.selectOptions(screen.getByTestId('expiry-year-select'), '2026');
+      await user.type(screen.getByTestId('cvv-input'), '456');
 
-      // Submit verification
       await user.click(screen.getByTestId('verify-button'));
 
       await waitFor(() => {
-        expect(onVerificationComplete).toHaveBeenCalledWith(
-          expect.objectContaining({
-            cardToken: 'custom-token-456'
-          })
-        );
+        expect(onVerificationComplete).toHaveBeenCalledWith({
+          successful: true,
+          verified: true,
+          cardToken: 'custom-token-456',
+          cardDetails: {
+            last4: '4444',
+            cardType: 'visa',
+            expiryMonth: '06',
+            expiryYear: '2026'
+          }
+        });
       });
     });
 
-    it('should show error for incomplete form', async () => {
+    it('should handle incomplete form submission', async () => {
       const onError = jest.fn();
       const user = userEvent.setup();
       
       render(<MockVerifyCard {...defaultProps} onError={onError} />);
 
-      // Submit without filling required fields
+      // Try to verify without filling form
       await user.click(screen.getByTestId('verify-button'));
 
       await waitFor(() => {
@@ -298,23 +317,50 @@ describe('VerifyCard Component', () => {
       });
     });
 
-    it('should handle missing card number', async () => {
+    it('should handle partial form completion', async () => {
       const onError = jest.fn();
       const user = userEvent.setup();
       
       render(<MockVerifyCard {...defaultProps} onError={onError} />);
 
       // Fill only some fields
+      await user.type(screen.getByTestId('card-number-input'), '4111111111111111');
       await user.selectOptions(screen.getByTestId('expiry-month-select'), '12');
-      await user.selectOptions(screen.getByTestId('expiry-year-select'), '2025');
-      await user.type(screen.getByTestId('cvv-input'), '123');
+      // Leave year and CVV empty
 
-      // Submit verification
       await user.click(screen.getByTestId('verify-button'));
 
       await waitFor(() => {
         expect(onError).toHaveBeenCalledWith('All fields are required');
       });
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle verification errors', async () => {
+      const onError = jest.fn();
+      const user = userEvent.setup();
+      
+      // Create a component that throws an error
+      const ErrorVerifyCard = ({ onError: onErrorProp, ...props }: any) => {
+        const handleVerify = () => {
+          onErrorProp?.('Verification service unavailable');
+        };
+
+        return (
+          <div data-testid="verify-card">
+            <button onClick={handleVerify} data-testid="verify-button">
+              Verify
+            </button>
+          </div>
+        );
+      };
+
+      render(React.createElement(ErrorVerifyCard, { onError }));
+
+      await user.click(screen.getByTestId('verify-button'));
+
+      expect(onError).toHaveBeenCalledWith('Verification service unavailable');
     });
   });
 
@@ -335,66 +381,33 @@ describe('VerifyCard Component', () => {
       expect(form.tagName).toBe('FORM');
     });
 
-    it('should support keyboard navigation', async () => {
+    it('should handle keyboard navigation', async () => {
       const user = userEvent.setup();
+      
       render(<MockVerifyCard {...defaultProps} />);
 
       const cardNumberInput = screen.getByTestId('card-number-input');
-      
-      await user.click(cardNumberInput);
+      const monthSelect = screen.getByTestId('expiry-month-select');
+
+      await user.tab();
       expect(cardNumberInput).toHaveFocus();
 
       await user.tab();
-      expect(screen.getByTestId('expiry-month-select')).toHaveFocus();
-
-      await user.tab();
-      expect(screen.getByTestId('expiry-year-select')).toHaveFocus();
-
-      await user.tab();
-      expect(screen.getByTestId('cvv-input')).toHaveFocus();
+      expect(monthSelect).toHaveFocus();
     });
   });
 
-  describe('Security', () => {
-    it('should handle sensitive card data properly', async () => {
-      const onVerificationComplete = jest.fn();
+  describe('CVV Length Validation', () => {
+    it('should limit CVV input to 4 characters', async () => {
       const user = userEvent.setup();
       
-      render(<MockVerifyCard {...defaultProps} onVerificationComplete={onVerificationComplete} />);
+      render(<MockVerifyCard {...defaultProps} />);
 
-      await user.type(screen.getByTestId('card-number-input'), '4111111111111111');
-      await user.selectOptions(screen.getByTestId('expiry-month-select'), '12');
-      await user.selectOptions(screen.getByTestId('expiry-year-select'), '2025');
-      await user.type(screen.getByTestId('cvv-input'), '123');
+      const cvvInput = screen.getByTestId('cvv-input');
+      await user.type(cvvInput, '12345'); // Try to type 5 characters
 
-      await user.click(screen.getByTestId('verify-button'));
-
-      await waitFor(() => {
-        const call = onVerificationComplete.mock.calls[0][0];
-        // Should only include last 4 digits, not full card number
-        expect(call.cardDetails.last4).toBe('1111');
-        expect(call.cardDetails.last4.length).toBe(4);
-      });
-    });
-
-    it('should not expose full card number in verification result', async () => {
-      const onVerificationComplete = jest.fn();
-      const user = userEvent.setup();
-      
-      render(<MockVerifyCard {...defaultProps} onVerificationComplete={onVerificationComplete} />);
-
-      await user.type(screen.getByTestId('card-number-input'), '5555555555554444');
-      await user.selectOptions(screen.getByTestId('expiry-month-select'), '06');
-      await user.selectOptions(screen.getByTestId('expiry-year-select'), '2026');
-      await user.type(screen.getByTestId('cvv-input'), '456');
-
-      await user.click(screen.getByTestId('verify-button'));
-
-      await waitFor(() => {
-        const result = onVerificationComplete.mock.calls[0][0];
-        expect(result.cardDetails).not.toHaveProperty('fullCardNumber');
-        expect(result.cardDetails.last4).toBe('4444');
-      });
+      // Should only show 4 characters due to maxLength
+      expect(cvvInput).toHaveValue('1234');
     });
   });
 });

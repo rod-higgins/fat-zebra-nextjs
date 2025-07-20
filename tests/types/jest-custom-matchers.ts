@@ -5,10 +5,16 @@
 declare global {
   namespace jest {
     interface Matchers<R> {
+      // Fat Zebra specific matchers
       toBeValidPaymentResponse(): R;
       toBeValidTokenResponse(): R;
       toHaveValidErrorStructure(): R;
       toMatchFatZebraErrorFormat(): R;
+      
+      // DOM/Component testing matchers (for component tests)
+      toBeDisabled(): R;
+      toHaveClass(className: string): R;
+      toHaveTextContent(text: string): R;
     }
   }
 }
@@ -84,12 +90,61 @@ function toMatchFatZebraErrorFormat(received: any) {
   };
 }
 
+// DOM/Component testing matchers
+function toBeDisabled(received: any) {
+  const pass = received.disabled === true || received.hasAttribute('disabled');
+  if (pass) {
+    return {
+      message: () => `expected element not to be disabled`,
+      pass: true,
+    };
+  } else {
+    return {
+      message: () => `expected element to be disabled`,
+      pass: false,
+    };
+  }
+}
+
+function toHaveClass(received: any, className: string) {
+  const pass = received.classList.contains(className);
+  if (pass) {
+    return {
+      message: () => `expected element not to have class "${className}"`,
+      pass: true,
+    };
+  } else {
+    return {
+      message: () => `expected element to have class "${className}"`,
+      pass: false,
+    };
+  }
+}
+
+function toHaveTextContent(received: any, text: string) {
+  const pass = received.textContent === text || received.textContent?.includes(text);
+  if (pass) {
+    return {
+      message: () => `expected element not to have text content "${text}"`,
+      pass: true,
+    };
+  } else {
+    return {
+      message: () => `expected element to have text content "${text}", but got "${received.textContent}"`,
+      pass: false,
+    };
+  }
+}
+
 // Register the matchers
 expect.extend({
   toBeValidPaymentResponse,
   toBeValidTokenResponse,
   toHaveValidErrorStructure,
-  toMatchFatZebraErrorFormat
+  toMatchFatZebraErrorFormat,
+  toBeDisabled,
+  toHaveClass,
+  toHaveTextContent
 });
 
 export {};

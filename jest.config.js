@@ -6,7 +6,7 @@ module.exports = {
   // Setup files
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   
-  // Module path mapping (FIXED: was moduleNameMapping)
+  // Module path mapping
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@/components/(.*)$': '<rootDir>/src/components/$1',
@@ -16,16 +16,18 @@ module.exports = {
     '^@/types/(.*)$': '<rootDir>/src/types/$1',
     '^@/server/(.*)$': '<rootDir>/src/server/$1',
     // Module mocking for optional dependencies
-    '^next/server$': '<rootDir>/tests/__mocks__/next-server.js'
+    '^next/server$': '<rootDir>/tests/__mocks__/next-server.js',
+    // Mock @fat-zebra/sdk to prevent module not found errors
+    '^@fat-zebra/sdk$': '<rootDir>/tests/__mocks__/fat-zebra-sdk.js'
   },
   
-  // Transform configuration (FIXED: moved ts-jest config here from globals)
+  // Transform configuration
   transform: {
     '^.+\\.(ts|tsx)$': [
       'ts-jest',
       {
-        tsconfig: 'tsconfig.json'
-        // REMOVED: isolatedModules (deprecated, should be in tsconfig.json)
+        tsconfig: 'tsconfig.json',
+        useESM: true
       }
     ]
   },
@@ -61,8 +63,6 @@ module.exports = {
   
   coverageReporters: ['text', 'lcov', 'html'],
   coverageDirectory: 'coverage',
-  
-  // REMOVED: globals configuration (deprecated)
   
   // Timeout settings
   testTimeout: 10000,

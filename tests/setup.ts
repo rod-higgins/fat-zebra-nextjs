@@ -1,173 +1,177 @@
-// tests/setup.ts - Test setup for Jest - CommonJS syntax to avoid ESM/CommonJS conflicts
+import '@testing-library/jest-dom';
 
-// Set up global polyfills for Node.js environment only if they don't exist
-if (typeof global.TextEncoder === 'undefined') {
-  const { TextEncoder } = require('util');
-  global.TextEncoder = TextEncoder;
-}
+// Global fetch mock
+global.fetch = jest.fn();
 
-if (typeof global.TextDecoder === 'undefined') {
-  const { TextDecoder } = require('util');
-  global.TextDecoder = TextDecoder;
-}
+// Mock localStorage and sessionStorage
+const localStorageMock = {
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+  clear: jest.fn(),
+};
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock
+});
+Object.defineProperty(window, 'sessionStorage', {
+  value: localStorageMock
+});
 
-// Helper function to create proper Response mock
-const createMockResponse = (data: any, ok: boolean = true, status: number = 200): Response => {
-  const response = {
-    ok,
+// Mock window.location
+delete (window as any).location;
+window.location = {
+  href: 'http://localhost:3000',
+  origin: 'http://localhost:3000',
+  protocol: 'http:',
+  host: 'localhost:3000',
+  hostname: 'localhost',
+  port: '3000',
+  pathname: '/',
+  search: '',
+  hash: '',
+  assign: jest.fn(),
+  reload: jest.fn(),
+  replace: jest.fn(),
+  toString: () => 'http://localhost:3000'
+} as any;
+
+// Mock console methods to reduce test noise
+const originalError = console.error;
+beforeAll(() => {
+  console.error = (...args: any[]) => {
+    if (
+      typeof args[0] === 'string' &&
+      (args[0].includes('Warning: ReactDOM.render is deprecated') ||
+       args[0].includes('Warning: An invalid form control'))
+    ) {
+      return;
+    }
+    originalError.call(console, ...args);
+  };
+});
+
+afterAll(() => {
+  console.error = originalError;
+});
+
+// Test helper functions
+export const mockFetchResponse = (data: any, status = 200): Promise<Response> => {
+  return Promise.resolve({
+    ok: status < 400,
     status,
-    statusText: ok ? 'OK' : 'Error',
-    headers: new Headers(),
+    statusText: status < 400 ? 'OK' : 'Error',
+    headers: new Headers({
+      'Content-Type': 'application/json',
+    }),
+    json: () => Promise.resolve(data),
+    text: () => Promise.resolve(JSON.stringify(data)),
+    clone: () => mockFetchResponse(data, status).then(r => r),
+    // Add missing Response properties
     redirected: false,
     type: 'basic' as ResponseType,
-    url: '',
+    url: 'http://localhost:3000/test',
     body: null,
     bodyUsed: false,
-    json: jest.fn().mockResolvedValue(data),
-    text: jest.fn().mockResolvedValue(JSON.stringify(data)),
-    arrayBuffer: jest.fn().mockResolvedValue(new ArrayBuffer(0)),
-    blob: jest.fn().mockResolvedValue(new Blob()),
-    formData: jest.fn().mockResolvedValue(new FormData()),
-    clone: jest.fn(),
-    bytes: jest.fn().mockResolvedValue(new Uint8Array())
-  };
-
-  // Set up clone to return a copy of the response after it's created
-  response.clone = jest.fn().mockReturnValue({ ...response });
-
-  return response as unknown as Response;
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    blob: () => Promise.resolve(new Blob()),
+    formData: () => Promise.resolve(new FormData()),
+    bytes: () => Promise.resolve(new Uint8Array()),
+  } as unknown as Response);
 };
 
-// Mock fetch for testing with proper Response interface implementation
-global.fetch = jest.fn(() => Promise.resolve(createMockResponse({})));
-
-// Mock Response constructor
-Object.defineProperty(global, 'Response', {
-  value: function MockResponse(body?: BodyInit | null, init?: ResponseInit) {
-    return createMockResponse(
-      typeof body === 'string' ? JSON.parse(body) : body,
-      (init?.status || 200) < 400,
-      init?.status || 200
-    );
-  },
-  writable: true
-});
-
-// Helper function to mock fetch responses
-const mockFetchResponse = (data: any, ok: boolean = true, status: number = 200) => {
-  return Promise.resolve(createMockResponse(data, ok, status));
-};
-
-const mockFetchError = (error: Error) => {
-  return Promise.reject(error);
-};
-
-const createMockPurchaseRequest = () => ({
-  amount: 2500, // $25.00 in cents
+export const createMockPurchaseRequest = () => ({
+  amount: 2500, // 25.00 in cents
   currency: 'AUD',
-  card_number: '4005550000000001',
+  reference: 'TEST-REF-123',
+  card_holder: 'John Doe',
+  card_number: '4111111111111111',
   card_expiry: '12/25',
   cvv: '123',
-  card_holder: 'John Doe',
-  reference: 'TEST-' + Date.now(),
-  customer_ip: '127.0.0.1',
-  customer: {
-    first_name: 'John',
-    last_name: 'Doe',
-    email: 'john.doe@example.com',
-    phone: '+61400000000'
-  }
+  customer_ip: '127.0.0.1'
 });
 
-const createMockTransactionResponse = () => ({
+export const createMockTransactionResponse = (overrides = {}) => ({
   successful: true,
   response: {
-    id: 'txn_' + Date.now(),
+    id: 'txn-123',
     amount: 2500,
     currency: 'AUD',
-    reference: 'TEST-' + Date.now(),
+    reference: 'TEST-REF-123',
     message: 'Approved',
     successful: true,
-    settlement_date: new Date().toISOString().split('T')[0],
-    transaction_id: 'txn_' + Date.now(),
+    settlement_date: '2024-01-15',
+    transaction_id: 'txn-123',
     card_holder: 'John Doe',
-    card_number: '4005***********0001',
-    card_type: 'Visa',
-    authorization: '123456',
+    card_number: '************1111',
+    card_type: 'visa',
+    authorization: 'AUTH123',
     captured: true,
-    created_at: new Date().toISOString()
+    created_at: '2024-01-15T10:30:00Z',
+    ...overrides
   },
-  errors: [],
-  test: true
+  errors: []
 });
 
-const createMockErrorResponse = (message: string = 'Test error', errors: string[] = []) => ({
+export const createMockTokenizationResponse = () => ({
+  successful: true,
+  response: {
+    token: 'card-token-123',
+    card_holder: 'John Doe',
+    card_number: '************1111',
+    card_type: 'visa',
+    expiry_date: '12/25',
+    created_at: '2024-01-15T10:30:00Z'
+  },
+  errors: []
+});
+
+export const createMockErrorResponse = (errors: string[] = ['Transaction failed']) => ({
   successful: false,
-  response: null,
-  errors: [message, ...errors],
-  message,
+  errors,
   test: true
 });
 
-// Mock environment variables
-process.env.FATZEBRA_USERNAME = 'test-username';
-process.env.FATZEBRA_TOKEN = 'test-token';
-process.env.FATZEBRA_SHARED_SECRET = 'test-shared-secret';
-process.env.FATZEBRA_CLIENT_ID = 'test-client-id';
-process.env.FATZEBRA_CLIENT_SECRET = 'test-client-secret';
-process.env.NODE_ENV = 'test';
+export const createMockAuthorizationRequest = () => ({
+  amount: 2500,
+  currency: 'AUD',
+  reference: 'AUTH-REF-123',
+  card_holder: 'John Doe',
+  card_number: '4111111111111111',
+  card_expiry: '12/25',
+  cvv: '123',
+  capture: false
+});
+
+export const createMockRefundRequest = () => ({
+  transaction_id: 'txn-123',
+  amount: 2500,
+  reference: 'REFUND-REF-123',
+  reason: 'Customer request'
+});
+
+export const createMockTokenizationRequest = () => ({
+  card_holder: 'John Doe',
+  card_number: '4111111111111111',
+  card_expiry: '12/25',
+  cvv: '123'
+});
+
+// Custom matchers are defined in tests/types/jest-custom-matchers.ts
 
 // Clean up after each test
 afterEach(() => {
   jest.clearAllMocks();
-  (global.fetch as jest.Mock).mockClear();
+  (fetch as jest.Mock).mockClear();
 });
 
-// Set up default console mocks to reduce noise in tests
-const originalConsole = { ...console };
-
-beforeAll(() => {
-  console.log = jest.fn();
-  console.info = jest.fn();
-  console.warn = jest.fn();
-  console.error = jest.fn();
-});
-
-afterAll(() => {
-  console.log = originalConsole.log;
-  console.info = originalConsole.info;
-  console.warn = originalConsole.warn;
-  console.error = originalConsole.error;
-});
-
-// Add custom matchers
-expect.extend({
-  toBeValidCardNumber(received: string) {
-    const digits = received.replace(/\D/g, '');
-    const isValid = digits.length >= 13 && digits.length <= 19;
-    
-    return {
-      message: () => `expected ${received} to be a valid card number`,
-      pass: isValid,
-    };
-  },
-  
-  toBeValidEmail(received: string) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const isValid = emailRegex.test(received);
-    
-    return {
-      message: () => `expected ${received} to be a valid email`,
-      pass: isValid,
-    };
-  },
-});
-
-// Export helper functions using CommonJS syntax
+// Export mock functions for CommonJS compatibility
 module.exports = {
   mockFetchResponse,
-  mockFetchError,
   createMockPurchaseRequest,
   createMockTransactionResponse,
-  createMockErrorResponse
+  createMockTokenizationResponse,
+  createMockErrorResponse,
+  createMockAuthorizationRequest,
+  createMockRefundRequest,
+  createMockTokenizationRequest
 };
