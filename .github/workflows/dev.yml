@@ -146,7 +146,7 @@ jobs:
     steps:
       - name: Summary
         run: |
-          echo "🚀 Development Checks Summary"
+          echo "Development Checks Summary"
           echo "============================"
           echo "Lint & Type Check: ${{ needs.quick-check.result }}"
           echo "Test Changes: ${{ needs.test-changes.result }}"
@@ -156,76 +156,8 @@ jobs:
           if [ "${{ needs.quick-check.result }}" == "failure" ] || 
              [ "${{ needs.test-changes.result }}" == "failure" ] || 
              [ "${{ needs.build-check.result }}" == "failure" ]; then
-            echo "Some checks failed. Please fix the issues before merging."
+            echo "Some checks failed!"
             exit 1
+          else
+            echo "All checks passed! 🎉"
           fi
-          
-          echo "All development checks passed!"
-
-  # Auto-comment on PR with results
-  pr-comment:
-    name: PR Comment
-    runs-on: ubuntu-latest
-    needs: [dev-summary]
-    if: always() && github.event_name == 'pull_request' && github.event.pull_request.draft == false
-    
-    steps:
-      - name: Comment on PR
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            
-            const botComment = comments.find(comment => 
-              comment.user.type === 'Bot' && 
-              comment.body.includes('Development Checks')
-            );
-            
-            const checkResults = {
-              'quick-check': '${{ needs.quick-check.result }}',
-              'test-changes': '${{ needs.test-changes.result }}',
-              'build-check': '${{ needs.build-check.result }}',
-              'security-check': '${{ needs.security-check.result }}'
-            };
-            
-            const allPassed = Object.values(checkResults).every(result => result === 'success');
-            const emoji = allPassed ? 'Yes' : 'No';
-            
-            const body = `
-            ## ${emoji} Development Checks Results
-            
-            | Check | Status |
-            |-------|--------|
-            | Lint & Type Check | ${checkResults['quick-check'] === 'success' ? 'Yes' : 'No'} |
-            | Test Changes | ${checkResults['test-changes'] === 'success' ? 'Yes' : 'No'} |
-            | Build Check | ${checkResults['build-check'] === 'success' ? 'Yes' : 'No'} |
-            | Security Check | ${checkResults['security-check'] === 'success' ? 'Yes' : 'No'} |
-            
-            ${allPassed ? 
-              'All checks passed! This PR is ready for review.' : 
-              'Some checks failed. Please fix the issues before merging.'
-            }
-            
-            *Updated: ${new Date().toISOString()}*
-            `;
-            
-            if (botComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: botComment.id,
-                body: body
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: body
-              });
-            }
