@@ -48,18 +48,9 @@ export {
 } from '../utils';
 
 // Export standalone types and utilities
-export type {
-  StandaloneRequest,
-  StandaloneResponse,
-  RequestHandler,
-} from './types';
+export type { StandaloneRequest, StandaloneResponse, RequestHandler } from './types';
 
-export {
-  createResponse,
-  extractRequestData,
-  getClientIP,
-  isNextJSAvailable,
-} from './types';
+export { createResponse, extractRequestData, getClientIP, isNextJSAvailable } from './types';
 
 // Export standalone route handlers (work without Next.js)
 export {
@@ -125,23 +116,30 @@ if (checkNextJSAvailability()) {
 
 // Export Next.js specific handlers if available, otherwise use standalone
 export const handlePurchaseNextJS = nextjsRoutes.handlePurchase || handlePurchaseStandalone;
-export const handleAuthorizationNextJS = nextjsRoutes.handleAuthorization || handleAuthorizationStandalone;
+export const handleAuthorizationNextJS =
+  nextjsRoutes.handleAuthorization || handleAuthorizationStandalone;
 export const handleCaptureNextJS = nextjsRoutes.handleCapture || handleCaptureStandalone;
 export const handleRefundNextJS = nextjsRoutes.handleRefund || handleRefundStandalone;
-export const handleTokenizationNextJS = nextjsRoutes.handleTokenization || handleTokenizationStandalone;
+export const handleTokenizationNextJS =
+  nextjsRoutes.handleTokenization || handleTokenizationStandalone;
 export const handleVoidNextJS = nextjsRoutes.handleVoid || handleVoidStandalone;
-export const handleTransactionStatusNextJS = nextjsRoutes.handleTransactionStatus || handleTransactionStatusStandalone;
-export const handleVerifyWebhookNextJS = nextjsRoutes.handleVerifyWebhook || handleVerifyWebhookStandalone;
-export const handleGenerateHashNextJS = nextjsRoutes.handleGenerateHash || handleGenerateHashStandalone;
-export const handleHealthCheckNextJS = nextjsRoutes.handleHealthCheck || handleHealthCheckStandalone;
+export const handleTransactionStatusNextJS =
+  nextjsRoutes.handleTransactionStatus || handleTransactionStatusStandalone;
+export const handleVerifyWebhookNextJS =
+  nextjsRoutes.handleVerifyWebhook || handleVerifyWebhookStandalone;
+export const handleGenerateHashNextJS =
+  nextjsRoutes.handleGenerateHash || handleGenerateHashStandalone;
+export const handleHealthCheckNextJS =
+  nextjsRoutes.handleHealthCheck || handleHealthCheckStandalone;
 
 // Enhanced webhook handler for Next.js (if available)
-export const handleEnhancedWebhookNextJS = nextjsRoutes.handleEnhancedWebhook || handleVerifyWebhookStandalone;
+export const handleEnhancedWebhookNextJS =
+  nextjsRoutes.handleEnhancedWebhook || handleVerifyWebhookStandalone;
 
 // Utility function to get appropriate handlers based on environment
 export function getRouteHandlers() {
   const isNextJS = checkNextJSAvailability();
-  
+
   return {
     isNextJS,
     handlers: {
@@ -151,17 +149,18 @@ export function getRouteHandlers() {
       refund: isNextJS ? handleRefundNextJS : handleRefundStandalone,
       tokenization: isNextJS ? handleTokenizationNextJS : handleTokenizationStandalone,
       void: isNextJS ? handleVoidNextJS : handleVoidStandalone,
-      transactionStatus: isNextJS ? handleTransactionStatusNextJS : handleTransactionStatusStandalone,
+      transactionStatus: isNextJS
+        ? handleTransactionStatusNextJS
+        : handleTransactionStatusStandalone,
       verifyWebhook: isNextJS ? handleVerifyWebhookNextJS : handleVerifyWebhookStandalone,
       generateHash: isNextJS ? handleGenerateHashNextJS : handleGenerateHashStandalone,
       healthCheck: isNextJS ? handleHealthCheckNextJS : handleHealthCheckStandalone,
-    }
+    },
   };
 }
 
 // Standalone HTTP server wrapper for non-Next.js environments
 export function createStandaloneServer(handlers: Record<string, any>) {
-  
   return (req: any, res: any) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const path = url.pathname;
@@ -169,7 +168,7 @@ export function createStandaloneServer(handlers: Record<string, any>) {
 
     // Simple routing based on path
     let handler: any = null;
-    
+
     if (path.startsWith('/api/payments') && method === 'POST') {
       handler = handlers.purchase;
     } else if (path.startsWith('/api/auth') && method === 'POST') {
@@ -202,11 +201,11 @@ export function createStandaloneServer(handlers: Record<string, any>) {
             method,
             url: req.url,
             headers: req.headers,
-            body: body ? JSON.parse(body) : null
+            body: body ? JSON.parse(body) : null,
           };
 
           const response = await handler(request);
-          
+
           // Convert our response to HTTP format
           if (response && typeof response === 'object') {
             if (response.status) {
@@ -227,20 +226,24 @@ export function createStandaloneServer(handlers: Record<string, any>) {
           console.error('Request parsing error:', parseError);
           res.statusCode = 400;
           res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({
-            successful: false,
-            errors: ['Invalid request format']
-          }));
+          res.end(
+            JSON.stringify({
+              successful: false,
+              errors: ['Invalid request format'],
+            })
+          );
         }
       });
     } catch (error) {
       console.error('Handler error:', error);
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        successful: false,
-        errors: [extractErrorMessage(error)]
-      }));
+      res.end(
+        JSON.stringify({
+          successful: false,
+          errors: [extractErrorMessage(error)],
+        })
+      );
     }
   };
 }
@@ -252,20 +255,20 @@ export async function generateAccessToken(request: any): Promise<any> {
     if (method !== 'POST') {
       const response = {
         successful: false,
-        errors: ['Method not allowed']
+        errors: ['Method not allowed'],
       };
-      
+
       if (checkNextJSAvailability()) {
         if (typeof require !== 'undefined') {
           const { NextResponse } = require('next/server');
           return NextResponse.json(response, { status: 405 });
         }
       }
-      
+
       return {
         status: 405,
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(response)
+        body: JSON.stringify(response),
       };
     }
 
@@ -275,20 +278,20 @@ export async function generateAccessToken(request: any): Promise<any> {
     if (!clientId || !clientSecret) {
       const response = {
         successful: false,
-        errors: ['Missing client credentials']
+        errors: ['Missing client credentials'],
       };
-      
+
       if (checkNextJSAvailability()) {
         if (typeof require !== 'undefined') {
           const { NextResponse } = require('next/server');
           return NextResponse.json(response, { status: 400 });
         }
       }
-      
+
       return {
         status: 400,
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(response)
+        body: JSON.stringify(response),
       };
     }
 
@@ -297,7 +300,7 @@ export async function generateAccessToken(request: any): Promise<any> {
       access_token: `fz_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       token_type: 'Bearer',
       expires_in: 3600,
-      scope: scope || 'payments'
+      scope: scope || 'payments',
     };
 
     if (checkNextJSAvailability()) {
@@ -305,7 +308,7 @@ export async function generateAccessToken(request: any): Promise<any> {
         const { NextResponse } = require('next/server');
         return NextResponse.json({
           successful: true,
-          ...token
+          ...token,
         });
       }
     }
@@ -315,15 +318,15 @@ export async function generateAccessToken(request: any): Promise<any> {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         successful: true,
-        ...token
-      })
+        ...token,
+      }),
     };
   } catch (error) {
     console.error('OAuth token generation error:', error);
 
     const response = {
       successful: false,
-      errors: [extractErrorMessage(error)] // FIXED: Now this function is properly imported
+      errors: [extractErrorMessage(error)], // FIXED: Now this function is properly imported
     };
 
     if (checkNextJSAvailability()) {
@@ -336,7 +339,7 @@ export async function generateAccessToken(request: any): Promise<any> {
     return {
       status: 500,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(response)
+      body: JSON.stringify(response),
     };
   }
 }
@@ -348,20 +351,20 @@ export async function generateVerificationHashRoute(request: any): Promise<any> 
     if (method !== 'POST') {
       const response = {
         successful: false,
-        errors: ['Method not allowed']
+        errors: ['Method not allowed'],
       };
-      
+
       if (checkNextJSAvailability()) {
         if (typeof require !== 'undefined') {
           const { NextResponse } = require('next/server');
           return NextResponse.json(response, { status: 405 });
         }
       }
-      
+
       return {
         status: 405,
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(response)
+        body: JSON.stringify(response),
       };
     }
 
@@ -371,36 +374,39 @@ export async function generateVerificationHashRoute(request: any): Promise<any> 
     if (!reference || amount === undefined || !currency) {
       const response = {
         successful: false,
-        errors: ['Missing required fields: reference, amount, currency']
+        errors: ['Missing required fields: reference, amount, currency'],
       };
-      
+
       if (checkNextJSAvailability()) {
         if (typeof require !== 'undefined') {
           const { NextResponse } = require('next/server');
           return NextResponse.json(response, { status: 400 });
         }
       }
-      
+
       return {
         status: 400,
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(response)
+        body: JSON.stringify(response),
       };
     }
 
-    const hash = generateVerificationHash({
-      reference,
-      amount,
-      currency,
-      timestamp: Date.now()
-    }, process.env.FAT_ZEBRA_SHARED_SECRET || '');
+    const hash = generateVerificationHash(
+      {
+        reference,
+        amount,
+        currency,
+        timestamp: Date.now(),
+      },
+      process.env.FAT_ZEBRA_SHARED_SECRET || ''
+    );
 
     const responseData = {
       successful: true,
       hash,
       reference,
       amount,
-      currency
+      currency,
     };
 
     if (checkNextJSAvailability()) {
@@ -413,14 +419,14 @@ export async function generateVerificationHashRoute(request: any): Promise<any> 
     return {
       status: 200,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(responseData)
+      body: JSON.stringify(responseData),
     };
   } catch (error) {
     console.error('Hash generation error:', error);
 
     const response = {
       successful: false,
-      errors: [extractErrorMessage(error)] // FIXED: Now this function is properly imported
+      errors: [extractErrorMessage(error)], // FIXED: Now this function is properly imported
     };
 
     if (checkNextJSAvailability()) {
@@ -433,7 +439,7 @@ export async function generateVerificationHashRoute(request: any): Promise<any> 
     return {
       status: 500,
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(response)
+      body: JSON.stringify(response),
     };
   }
 }

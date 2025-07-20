@@ -51,14 +51,14 @@ export function createResponse(data: any, status: number = 200): any {
       console.debug('NextResponse import failed, using fallback');
     }
   }
-  
+
   // Standalone response
   return {
     status,
     statusText: status === 200 ? 'OK' : 'Error',
     headers: { 'content-type': 'application/json' },
     json: () => Promise.resolve(data),
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   };
 }
 
@@ -86,7 +86,7 @@ export async function extractRequestData(request: any): Promise<{
     }
 
     const headers: Record<string, string> = {};
-    
+
     // Handle different header formats
     if (request.headers) {
       if (typeof request.headers.entries === 'function') {
@@ -97,8 +97,13 @@ export async function extractRequestData(request: any): Promise<{
       } else if (typeof request.headers.get === 'function') {
         // Headers object with get method
         const commonHeaders = [
-          'authorization', 'content-type', 'user-agent', 'accept',
-          'x-forwarded-for', 'x-real-ip', 'cf-connecting-ip'
+          'authorization',
+          'content-type',
+          'user-agent',
+          'accept',
+          'x-forwarded-for',
+          'x-real-ip',
+          'cf-connecting-ip',
         ];
         for (const header of commonHeaders) {
           const value = request.headers.get(header);
@@ -116,7 +121,7 @@ export async function extractRequestData(request: any): Promise<{
       method: request.method || 'GET',
       body,
       headers,
-      url: request.url || ''
+      url: request.url || '',
     };
   }
 
@@ -125,14 +130,14 @@ export async function extractRequestData(request: any): Promise<{
     method: request.method || 'GET',
     body: request.body ? JSON.parse(request.body) : null,
     headers: request.headers || {},
-    url: request.url || ''
+    url: request.url || '',
   };
 }
 
 // Helper to get client IP from various request types
 export function getClientIP(request: any): string {
   const headers = request.headers || {};
-  
+
   // Function to get header value regardless of header format
   const getHeader = (name: string): string | undefined => {
     if (typeof headers.get === 'function') {
@@ -140,7 +145,7 @@ export function getClientIP(request: any): string {
     }
     return headers[name];
   };
-  
+
   const forwarded = getHeader('x-forwarded-for');
   const realIP = getHeader('x-real-ip');
   const cfConnectingIP = getHeader('cf-connecting-ip');

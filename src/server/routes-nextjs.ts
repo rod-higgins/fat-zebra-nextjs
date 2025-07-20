@@ -24,19 +24,19 @@ try {
       status: init?.status || 200,
       json: () => Promise.resolve(data),
       headers: new Map(),
-      body: JSON.stringify(data)
-    })
+      body: JSON.stringify(data),
+    }),
   };
 }
 
 import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../lib/client';
 import { generateVerificationHash, extractErrorMessage } from '../utils';
-import type { 
-  PurchaseRequest, 
+import type {
+  PurchaseRequest,
   AuthorizationRequest,
   RefundRequest,
   TokenizationRequest,
-  WebhookEvent 
+  WebhookEvent,
 } from '../types';
 
 // Runtime configuration for Next.js Edge Runtime
@@ -55,7 +55,7 @@ function createNextResponse(data: any, status: number = 200) {
     status,
     json: () => Promise.resolve(data),
     headers: new Map(),
-    body: JSON.stringify(data)
+    body: JSON.stringify(data),
   };
 }
 
@@ -68,10 +68,10 @@ function verifyWebhookSignature(payload: string, signature: string, secret: stri
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(payload);
     const expectedSignature = hmac.digest('hex');
-    
+
     // Compare signatures using a constant-time comparison
     return crypto.timingSafeEqual(
-      Buffer.from(signature, 'hex'), 
+      Buffer.from(signature, 'hex'),
       Buffer.from(expectedSignature, 'hex')
     );
   } catch (error) {
@@ -92,15 +92,18 @@ export async function handleHealthCheck(request: any): Promise<any> {
     return createNextResponse({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version || '0.3.10',
+      version: process.env.npm_package_version || '0.4.0',
       mode: 'nextjs',
-      edge: runtime === 'edge'
+      edge: runtime === 'edge',
     });
   } catch (error) {
-    return createNextResponse({
-      successful: false,
-      errors: [extractErrorMessage(error)]
-    }, 500);
+    return createNextResponse(
+      {
+        successful: false,
+        errors: [extractErrorMessage(error)],
+      },
+      500
+    );
   }
 }
 
@@ -419,10 +422,7 @@ export async function handleTransactionStatus(request: any): Promise<any> {
     const transactionId = url.searchParams.get('id');
 
     if (!transactionId) {
-      return createNextResponse(
-        { successful: false, errors: ['Missing transaction ID'] },
-        400
-      );
+      return createNextResponse({ successful: false, errors: ['Missing transaction ID'] }, 400);
     }
 
     const client = createFatZebraClient({
@@ -470,10 +470,7 @@ export async function handleVerifyWebhook(request: any): Promise<any> {
     const signature = request.headers.get?.('x-fz-signature') || request.headers['x-fz-signature'];
 
     if (!signature) {
-      return createNextResponse(
-        { successful: false, errors: ['Missing webhook signature'] },
-        400
-      );
+      return createNextResponse({ successful: false, errors: ['Missing webhook signature'] }, 400);
     }
 
     const sharedSecret = process.env.FAT_ZEBRA_SHARED_SECRET;
@@ -485,20 +482,17 @@ export async function handleVerifyWebhook(request: any): Promise<any> {
     }
 
     const isValid = verifyWebhookSignature(body, signature, sharedSecret);
-    
+
     if (!isValid) {
-      return createNextResponse(
-        { successful: false, errors: ['Invalid webhook signature'] },
-        401
-      );
+      return createNextResponse({ successful: false, errors: ['Invalid webhook signature'] }, 401);
     }
 
     const webhookData: WebhookEvent = JSON.parse(body);
-    
+
     return createNextResponse({
       successful: true,
       verified: true,
-      event: webhookData
+      event: webhookData,
     });
   } catch (error) {
     console.error('Webhook verification error:', error);
@@ -544,7 +538,7 @@ export async function handleGenerateHash(request: any): Promise<any> {
       reference,
       amount,
       currency,
-      timestamp: timestamp || Date.now()
+      timestamp: timestamp || Date.now(),
     };
 
     const hash = generateVerificationHash(hashData, sharedSecret);
@@ -554,7 +548,7 @@ export async function handleGenerateHash(request: any): Promise<any> {
       hash,
       reference,
       amount,
-      currency
+      currency,
     });
   } catch (error) {
     console.error('Hash generation error:', error);
@@ -582,10 +576,7 @@ export async function handleEnhancedWebhook(request: any): Promise<any> {
     const signature = request.headers.get?.('x-fz-signature') || request.headers['x-fz-signature'];
 
     if (!signature) {
-      return createNextResponse(
-        { successful: false, errors: ['Missing webhook signature'] },
-        400
-      );
+      return createNextResponse({ successful: false, errors: ['Missing webhook signature'] }, 400);
     }
 
     const sharedSecret = process.env.FAT_ZEBRA_SHARED_SECRET;
@@ -597,20 +588,17 @@ export async function handleEnhancedWebhook(request: any): Promise<any> {
     }
 
     const isValid = verifyWebhookSignature(body, signature, sharedSecret);
-    
+
     if (!isValid) {
-      return createNextResponse(
-        { successful: false, errors: ['Invalid webhook signature'] },
-        401
-      );
+      return createNextResponse({ successful: false, errors: ['Invalid webhook signature'] }, 401);
     }
 
     const webhookData: WebhookEvent = JSON.parse(body);
-    
+
     // Extract the appropriate identifier based on the response type
     let transactionId: string | undefined;
     const responseObject = webhookData.data.object;
-    
+
     if ('id' in responseObject) {
       // TransactionResponse or SettlementResponse
       transactionId = responseObject.id;
@@ -618,16 +606,16 @@ export async function handleEnhancedWebhook(request: any): Promise<any> {
       // TokenizationResponse
       transactionId = responseObject.token;
     }
-    
+
     // Here you would typically update your database
     // Example: await updatePaymentStatus(webhookData);
-    
+
     return createNextResponse({
       successful: true,
       verified: true,
       processed: true,
       event_type: webhookData.type,
-      transaction_id: transactionId
+      transaction_id: transactionId,
     });
   } catch (error) {
     console.error('Enhanced webhook error:', error);

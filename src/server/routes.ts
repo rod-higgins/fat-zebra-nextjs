@@ -17,7 +17,7 @@ import type {
 // Helper function to get client IP from request - FIXED TYPESCRIPT ERRORS
 function getClientIP(request: NextRequest): string {
   const headers = request.headers;
-  
+
   // Function to safely get header value regardless of header format
   const getHeader = (name: string): string | undefined => {
     if (typeof headers.get === 'function') {
@@ -357,7 +357,7 @@ export async function handleHealthCheck(request: NextRequest): Promise<NextRespo
     return NextResponse.json({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version || '0.3.10',
+      version: process.env.npm_package_version || '0.4.0',
       mode: 'nextjs',
     });
   } catch (error) {
