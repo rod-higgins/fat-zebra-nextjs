@@ -115,7 +115,7 @@ jobs:
         
       - name: Verify build artifacts
         run: |
-          echo "🔍 Checking build artifacts..."
+          echo "Checking build artifacts..."
           ls -la dist/
           
           # Check main artifacts exist
@@ -287,6 +287,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
   # Job 8: Publish to NPM (only on release)
+  # Job 8: Publish to NPM (only on release)
   publish:
     name: Publish to NPM
     runs-on: ubuntu-latest
@@ -325,9 +326,45 @@ jobs:
           fi
           
           echo "Package version matches release tag: $PACKAGE_VERSION"
+      
+      # Debug authentication setup
+      - name: Verify npm authentication
+        run: |
+          echo "Checking npm authentication..."
+          echo "Registry URL: ${{ env.REGISTRY_URL }}"
+          echo "Node auth token length: ${#NODE_AUTH_TOKEN}"
+          
+          # Check if .npmrc was created
+          if [ -f ~/.npmrc ]; then
+            echo ".npmrc file exists"
+            echo "Contents (without token):"
+            grep -v "authToken" ~/.npmrc || echo "No authToken found in .npmrc"
+          else
+            echo "No .npmrc file found"
+          fi
+          
+          # Test npm whoami
+          npm whoami || echo "npm whoami failed - authentication issue"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          
+      # Alternative: Create .npmrc manually if setup-node fails
+      - name: Setup npm authentication (fallback)
+        run: |
+          echo "Setting up npm authentication manually..."
+          echo "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" > ~/.npmrc
+          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
+          echo "always-auth=true" >> ~/.npmrc
+          
+          # Verify authentication
+          npm whoami
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           
       - name: Publish to NPM
-        run: npm publish --access public
+        run: |
+          echo "Publishing package..."
+          npm publish --access public --verbose
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           
