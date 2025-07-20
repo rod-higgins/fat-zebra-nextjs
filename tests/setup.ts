@@ -1,5 +1,5 @@
 /**
- * Test Setup Configuration - Enhanced for Fat Zebra v0.5.4
+ * Test Setup Configuration - Enhanced for Fat Zebra v0.5.5
  * 
  * This setup file configures the testing environment while preserving all
  * existing functionality and adding improvements for test stability.
@@ -415,4 +415,4 @@ module.exports = {
 // Custom test timeout for async operations
 jest.setTimeout(10000);
 
-console.log('🧪 Test environment setup complete - Fat Zebra v0.5.4');
+console.log('🧪 Test environment setup complete - Fat Zebra v0.5.5');
