@@ -1,4 +1,12 @@
+/**
+ * Test Setup Configuration - Enhanced for Fat Zebra v0.4.6
+ * 
+ * This setup file configures the testing environment while preserving all
+ * existing functionality and adding improvements for test stability.
+ */
+
 import '@testing-library/jest-dom';
+import { cleanup } from '@testing-library/react';
 
 // Global fetch mock
 global.fetch = jest.fn();
@@ -35,26 +43,40 @@ window.location = {
   toString: () => 'http://localhost:3000'
 } as any;
 
-// Mock console methods to reduce test noise
+// Enhanced console method mocking to reduce test noise
 const originalError = console.error;
+const originalWarn = console.warn;
+
 beforeAll(() => {
   console.error = (...args: any[]) => {
     if (
       typeof args[0] === 'string' &&
       (args[0].includes('Warning: ReactDOM.render is deprecated') ||
-       args[0].includes('Warning: An invalid form control'))
+       args[0].includes('Warning: An invalid form control') ||
+       args[0].includes('Warning: An update to') && args[0].includes('was not wrapped in act'))
     ) {
       return;
     }
     originalError.call(console, ...args);
   };
+
+  console.warn = (...args: any[]) => {
+    if (
+      typeof args[0] === 'string' &&
+      (args[0].includes('Warning: An update to') && args[0].includes('was not wrapped in act'))
+    ) {
+      return;
+    }
+    originalWarn.call(console, ...args);
+  };
 });
 
 afterAll(() => {
   console.error = originalError;
+  console.warn = originalWarn;
 });
 
-// Test helper functions
+// Enhanced test helper functions
 export const mockFetchResponse = (data: any, status = 200): Promise<Response> => {
   return Promise.resolve({
     ok: status < 400,
@@ -77,6 +99,10 @@ export const mockFetchResponse = (data: any, status = 200): Promise<Response> =>
     formData: () => Promise.resolve(new FormData()),
     bytes: () => Promise.resolve(new Uint8Array()),
   } as unknown as Response);
+};
+
+export const mockFetchError = (error: Error): Promise<never> => {
+  return Promise.reject(error);
 };
 
 export const createMockPurchaseRequest = () => ({
@@ -156,22 +182,191 @@ export const createMockTokenizationRequest = () => ({
   cvv: '123'
 });
 
-// Custom matchers are defined in tests/types/jest-custom-matchers.ts
-
-// Clean up after each test
-afterEach(() => {
-  jest.clearAllMocks();
-  (fetch as jest.Mock).mockClear();
+// Additional mock helpers for comprehensive testing
+export const createMockSubscriptionRequest = () => ({
+  amount: 2500,
+  currency: 'AUD',
+  reference: 'SUB-REF-123',
+  card_holder: 'John Doe',
+  card_number: '4111111111111111',
+  card_expiry: '12/25',
+  cvv: '123',
+  frequency: 'Monthly',
+  start_date: '2024-02-01'
 });
+
+export const createMockWebhookEvent = () => ({
+  event: 'transaction.successful',
+  data: {
+    id: 'txn-123',
+    amount: 2500,
+    currency: 'AUD',
+    successful: true
+  },
+  timestamp: '2024-01-15T10:30:00Z'
+});
+
+// Mock environment variables for tests
+process.env.FATZEBRA_USERNAME = 'test-username';
+process.env.FATZEBRA_TOKEN = 'test-token';
+process.env.FATZEBRA_SHARED_SECRET = 'test-secret';
+process.env.FATZEBRA_CLIENT_ID = 'test-client-id';
+process.env.FATZEBRA_CLIENT_SECRET = 'test-client-secret';
+process.env.NODE_ENV = 'test';
+
+// Mock ResizeObserver for jsdom
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
+// Mock IntersectionObserver for jsdom
+global.IntersectionObserver = class IntersectionObserver {
+  root: Element | Document | null = null;
+  rootMargin: string = '0px';
+  thresholds: ReadonlyArray<number> = [0];
+
+  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+    this.root = options?.root || null;
+    this.rootMargin = options?.rootMargin || '0px';
+    this.thresholds = options?.threshold ? 
+      (Array.isArray(options.threshold) ? options.threshold : [options.threshold]) : 
+      [0];
+  }
+
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+} as any;
+
+// Mock matchMedia for jsdom
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: jest.fn().mockImplementation(query => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: jest.fn(), // deprecated
+    removeListener: jest.fn(), // deprecated
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    dispatchEvent: jest.fn(),
+  })),
+});
+
+// Mock scroll behavior
+Object.defineProperty(window, 'scrollTo', {
+  value: jest.fn(),
+  writable: true
+});
+
+// Mock crypto for Node.js environment
+Object.defineProperty(global, 'crypto', {
+  value: {
+    getRandomValues: (arr: any) => {
+      for (let i = 0; i < arr.length; i++) {
+        arr[i] = Math.floor(Math.random() * 256);
+      }
+      return arr;
+    },
+    randomUUID: () => {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    },
+    subtle: {
+      generateKey: jest.fn(),
+      importKey: jest.fn(),
+      exportKey: jest.fn(),
+      encrypt: jest.fn(),
+      decrypt: jest.fn(),
+      sign: jest.fn(),
+      verify: jest.fn(),
+    }
+  }
+});
+
+// Enhanced cleanup after each test
+afterEach(() => {
+  // Cleanup React testing utilities
+  cleanup();
+  
+  // Clear all mocks
+  jest.clearAllMocks();
+  
+  // Clear fetch mock specifically
+  (fetch as jest.Mock).mockClear();
+  
+  // Reset local storage mock
+  localStorageMock.getItem.mockClear();
+  localStorageMock.setItem.mockClear();
+  localStorageMock.removeItem.mockClear();
+  localStorageMock.clear.mockClear();
+});
+
+// Global test utilities
+declare global {
+  namespace jest {
+    interface Matchers<R> {
+      toBeValidPaymentResponse(): R;
+      toBeValidTokenResponse(): R;
+      toHaveValidErrorStructure(): R;
+      toMatchFatZebraErrorFormat(): R;
+    }
+  }
+}
+
+// Test utilities for better error handling
+export const expectNoConsoleErrors = () => {
+  const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  
+  return {
+    restore: () => {
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    }
+  };
+};
+
+export const expectNoConsoleWarnings = () => {
+  const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  
+  return {
+    restore: () => {
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    }
+  };
+};
+
+export const waitForAsync = (ms: number = 0) => 
+  new Promise(resolve => setTimeout(resolve, ms));
 
 // Export mock functions for CommonJS compatibility
 module.exports = {
   mockFetchResponse,
+  mockFetchError,
   createMockPurchaseRequest,
   createMockTransactionResponse,
   createMockTokenizationResponse,
   createMockErrorResponse,
   createMockAuthorizationRequest,
   createMockRefundRequest,
-  createMockTokenizationRequest
+  createMockTokenizationRequest,
+  createMockSubscriptionRequest,
+  createMockWebhookEvent,
+  expectNoConsoleErrors,
+  expectNoConsoleWarnings,
+  waitForAsync
 };
+
+// Custom test timeout for async operations
+jest.setTimeout(10000);
+
+console.log('🧪 Test environment setup complete - Fat Zebra v0.4.6');

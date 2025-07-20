@@ -1,22 +1,59 @@
-import { useState, useCallback, useRef } from 'react';
+/**
+ * Fat Zebra Payment Hook Implementation
+ *
+ * This hook provides payment processing functionality with retry logic,
+ * loading state management, and error handling.
+ */
+
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { createFatZebraClient, handleFatZebraResponse } from '../lib/client';
 import { FatZebraError } from '../types';
-import { validateCard, extractErrorMessage } from '../utils';
 import type {
-  UsePaymentOptions,
-  UsePaymentResult,
   PurchaseRequest,
   TransactionResponse,
+  UsePaymentOptions,
+  UsePaymentResult,
 } from '../types';
 
 export function usePayment(options: UsePaymentOptions = {}): UsePaymentResult {
   const { onSuccess, onError, enableRetry = false, maxRetries = 3, retryDelay = 1000 } = options;
 
+  // State management
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
+
   const processPayment = useCallback(
     async (data: PurchaseRequest): Promise<TransactionResponse> => {
+      // Prevent concurrent requests
+      if (loading) {
+        throw new FatZebraError('Payment already in progress');
+      }
+
+      // Validate required fields
+      if (!data.amount || data.amount <= 0) {
+        const error = new FatZebraError('Invalid amount provided');
+        setError(error.message);
+        if (onError) onError(error);
+        throw error;
+      }
+
+      if (!data.card_number || !data.card_expiry || !data.cvv) {
+        const error = new FatZebraError('Missing required card details');
+        setError(error.message);
+        if (onError) onError(error);
+        throw error;
+      }
+
       setLoading(true);
       setError(null);
 
@@ -24,71 +61,55 @@ export function usePayment(options: UsePaymentOptions = {}): UsePaymentResult {
       abortControllerRef.current = new AbortController();
 
       try {
-        // Validate card details before sending
-        const cardValidation = validateCard({
-          card_holder: data.card_holder,
-          card_number: data.card_number,
-          card_expiry: data.card_expiry,
-          cvv: data.cvv,
+        // Create Fat Zebra client
+        const client = createFatZebraClient({
+          username: process.env.FATZEBRA_USERNAME || 'test',
+          token: process.env.FATZEBRA_TOKEN || 'test',
+          sandbox: process.env.NODE_ENV !== 'production',
+          ...(process.env.FATZEBRA_GATEWAY && { gatewayUrl: process.env.FATZEBRA_GATEWAY }),
         });
 
-        if (!cardValidation.valid) {
-          throw new FatZebraError('Card validation failed', cardValidation.errors);
-        }
-
-        // Prepare the request
-        const requestData = {
+        // Add customer IP if not provided
+        const enrichedData: PurchaseRequest = {
           ...data,
-          amount: Math.round(data.amount * 100), // Convert to cents
-          currency: data.currency || 'AUD',
-          reference: data.reference || `TXN-${Date.now()}`,
           customer_ip: data.customer_ip || getClientIP(),
         };
 
-        const response = await fetch('/api/fat-zebra/purchase', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestData),
-          signal: abortControllerRef.current.signal,
-        });
+        // Process the payment
+        const response = await client.purchase(enrichedData);
+        const handledResponse = handleFatZebraResponse(response);
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new FatZebraError(
-            errorData.message || `HTTP ${response.status}`,
-            errorData.errors || []
-          );
+        if (handledResponse.successful && handledResponse.response) {
+          const transactionResponse = handledResponse.response as TransactionResponse;
+
+          // Call success handler if provided
+          if (onSuccess) {
+            onSuccess(transactionResponse);
+          }
+
+          return transactionResponse;
+        } else {
+          // Handle payment failure
+          const errors = handledResponse.errors || ['Payment failed'];
+          throw new FatZebraError(errors.join(', '), errors);
         }
-
-        const result = await response.json();
-
-        if (!result.successful) {
-          throw new FatZebraError(
-            result.response?.message || 'Transaction failed',
-            result.errors || []
-          );
-        }
-
-        const transaction = result.response;
-
-        // Call success handler if provided
-        if (onSuccess) {
-          onSuccess(transaction);
-        }
-
-        return transaction;
       } catch (err) {
-        // Handle abort
-        if (err instanceof Error && err.name === 'AbortError') {
-          throw new FatZebraError('Request was cancelled');
+        let errorMessage = 'Payment processing failed';
+
+        if (err instanceof FatZebraError) {
+          errorMessage = err.message;
+        } else if (err instanceof Error) {
+          if (err.name === 'AbortError') {
+            errorMessage = 'Payment was cancelled';
+          } else if (err.message.includes('fetch')) {
+            errorMessage = 'Network error occurred';
+          } else {
+            errorMessage = err.message;
+          }
         }
 
-        const errorMessage = extractErrorMessage(err);
         setError(errorMessage);
 
-        // Create FatZebraError if it's not already one
         const fatZebraError = err instanceof FatZebraError ? err : new FatZebraError(errorMessage);
 
         // Call error handler if provided
@@ -107,7 +128,7 @@ export function usePayment(options: UsePaymentOptions = {}): UsePaymentResult {
         abortControllerRef.current = null;
       }
     },
-    [onSuccess, onError, enableRetry, maxRetries, retryDelay]
+    [loading, onSuccess, onError, enableRetry, maxRetries, retryDelay]
   );
 
   const retryPayment = useCallback(
@@ -165,19 +186,20 @@ export function usePaymentWithRetry(
   options: UsePaymentOptions & {
     retryCondition?: (error: FatZebraError) => boolean;
   } = {}
-) {
+): UsePaymentResult {
   const { retryCondition, ...paymentOptions } = options;
 
   const defaultRetryCondition = (error: FatZebraError) => {
     // Retry on network errors or temporary failures
     const retryableErrors = ['network error', 'timeout', 'server error', 'temporary unavailable'];
-
     return retryableErrors.some(keyword => error.message.toLowerCase().includes(keyword));
   };
 
   const finalOptions: UsePaymentOptions = {
     ...paymentOptions,
     enableRetry: true,
+    maxRetries: paymentOptions.maxRetries || 3,
+    retryDelay: paymentOptions.retryDelay || 1000,
     onError: error => {
       const shouldRetry = retryCondition ? retryCondition(error) : defaultRetryCondition(error);
 
