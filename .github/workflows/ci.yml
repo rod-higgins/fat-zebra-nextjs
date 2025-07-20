@@ -10,7 +10,7 @@ on:
 
 # Add workflow-level permissions
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
   actions: read
@@ -286,8 +286,7 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
-  # Job 8: Publish to NPM (only on release)
-  # Job 8: Publish to NPM (only on release)
+  # Job 8: Publish to NPM (only on release) - FIXED VERSION
   publish:
     name: Publish to NPM
     runs-on: ubuntu-latest
@@ -308,6 +307,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
         
+      # ESSENTIAL: Download the build artifacts from previous jobs
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -327,47 +327,38 @@ jobs:
           
           echo "Package version matches release tag: $PACKAGE_VERSION"
       
-      # Debug authentication setup
-      - name: Verify npm authentication
+      # FIXED: Create .npmrc with correct syntax
+      - name: Setup npm authentication
         run: |
-          echo "Checking npm authentication..."
-          echo "Registry URL: ${{ env.REGISTRY_URL }}"
-          echo "Node auth token length: ${#NODE_AUTH_TOKEN}"
-          
-          # Check if .npmrc was created
-          if [ -f ~/.npmrc ]; then
-            echo ".npmrc file exists"
-            echo "Contents (without token):"
-            grep -v "authToken" ~/.npmrc || echo "No authToken found in .npmrc"
-          else
-            echo "No .npmrc file found"
-          fi
-          
-          # Test npm whoami
-          npm whoami || echo "npm whoami failed - authentication issue"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          
-      # Alternative: Create .npmrc manually if setup-node fails
-      - name: Setup npm authentication (fallback)
-        run: |
-          echo "Setting up npm authentication manually..."
-          echo "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" > ~/.npmrc
+          echo "Setting up npm authentication..."
+          echo "//registry.npmjs.org/:_authToken=$NODE_AUTH_TOKEN" > ~/.npmrc
           echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
           echo "always-auth=true" >> ~/.npmrc
           
           # Verify authentication
+          echo "Verifying npm authentication..."
           npm whoami
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           
+      # ESSENTIAL: Create the package file before publishing
+      - name: Create package
+        run: |
+          echo "Creating package..."
+          npm pack
+          
+          # List the created package
+          echo "Package created:"
+          ls -la *.tgz
+          
       - name: Publish to NPM
         run: |
-          echo "Publishing package..."
+          echo "Publishing package to NPM..."
           npm publish --access public --verbose
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           
+      # FIXED: Now the *.tgz file exists
       - name: Create GitHub Release Assets
         uses: softprops/action-gh-release@v1
         with:
