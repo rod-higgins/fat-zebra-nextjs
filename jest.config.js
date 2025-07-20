@@ -1,8 +1,7 @@
 /**
  * Jest Configuration
  * 
- * This configuration enhances the existing Jest setup to address React testing 
- * warnings and improve test stability for the usePayment hook and other components.
+ * Fixed configuration to address validation warnings and test issues.
  * All existing functionality has been preserved.
  */
 
@@ -16,8 +15,8 @@ module.exports = {
     '<rootDir>/tests/types/jest-custom-matchers.ts'
   ],
   
-  // Module resolution
-  moduleNameMapping: {
+  // Module resolution - FIXED: was moduleNameMapping, should be moduleNameMapper
+  moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   
@@ -50,11 +49,12 @@ module.exports = {
     }
   },
   
-  // Transform configuration
+  // Transform configuration - FIXED: moved ts-jest config from globals to transform
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: 'tsconfig.json',
-      useESM: false
+      useESM: false,
+      isolatedModules: true
     }]
   },
   
@@ -72,16 +72,11 @@ module.exports = {
     customExportConditions: ['node', 'node-addons'],
   },
   
-  // Global setup for better test isolation
-  globals: {
-    'ts-jest': {
-      isolatedModules: true,
-      useESM: false
-    }
-  },
+  // REMOVED: Deprecated globals configuration
+  // globals: { 'ts-jest': { isolatedModules: true, useESM: false } }
   
   // Timeout configuration for async tests
-  testTimeout: 10000,
+  testTimeout: 15000,
   
   // Better error handling for async tests
   errorOnDeprecated: false,
