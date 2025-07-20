@@ -30,7 +30,7 @@ try {
 }
 
 import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../lib/client';
-import { generateVerificationHash, extractErrorMessage, extractErrorDetails } from '../utils';
+import { generateVerificationHash, extractErrorMessage } from '../utils';
 import type { 
   PurchaseRequest, 
   AuthorizationRequest,
@@ -60,34 +60,24 @@ function createNextResponse(data: any, status: number = 200) {
 }
 
 /**
- * Helper function to get client IP from Next.js request
+ * Utility function to verify webhook signature
  */
-function getClientIP(request: any): string {
-  const headers = request.headers || new Map();
-  const getHeader = (name: string) => {
-    if (typeof headers.get === 'function') {
-      return headers.get(name);
-    }
-    return headers[name];
-  };
-
-  const forwarded = getHeader('x-forwarded-for');
-  const realIP = getHeader('x-real-ip');
-  const cfConnectingIP = getHeader('cf-connecting-ip');
-
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
+function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
+  try {
+    const crypto = require('crypto');
+    const hmac = crypto.createHmac('sha256', secret);
+    hmac.update(payload);
+    const expectedSignature = hmac.digest('hex');
+    
+    // Compare signatures using a constant-time comparison
+    return crypto.timingSafeEqual(
+      Buffer.from(signature, 'hex'), 
+      Buffer.from(expectedSignature, 'hex')
+    );
+  } catch (error) {
+    console.error('Webhook signature verification error:', error);
+    return false;
   }
-
-  if (realIP) {
-    return realIP;
-  }
-
-  if (cfConnectingIP) {
-    return cfConnectingIP;
-  }
-
-  return 'unknown';
 }
 
 /**
@@ -102,7 +92,7 @@ export async function handleHealthCheck(request: any): Promise<any> {
     return createNextResponse({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version || '0.3.9',
+      version: process.env.npm_package_version || '0.3.10',
       mode: 'nextjs',
       edge: runtime === 'edge'
     });
@@ -215,7 +205,7 @@ export async function handleAuthorization(request: any): Promise<any> {
 }
 
 /**
- * Capture a previously authorized transaction
+ * Capture an authorized transaction with Next.js
  */
 export async function handleCapture(request: any): Promise<any> {
   try {
@@ -276,9 +266,9 @@ export async function handleRefund(request: any): Promise<any> {
 
     const body: RefundRequest = await request.json();
 
-    if (!body.transaction_id && !body.reference) {
+    if (!body.transaction_id) {
       return createNextResponse(
-        { successful: false, errors: ['Missing required field: transaction_id or reference'] },
+        { successful: false, errors: ['Missing required field: transaction_id'] },
         400
       );
     }
@@ -316,7 +306,7 @@ export async function handleRefund(request: any): Promise<any> {
 }
 
 /**
- * Tokenize a card with Next.js
+ * Process a tokenization request with Next.js
  */
 export async function handleTokenization(request: any): Promise<any> {
   try {
@@ -430,7 +420,7 @@ export async function handleTransactionStatus(request: any): Promise<any> {
 
     if (!transactionId) {
       return createNextResponse(
-        { successful: false, errors: ['Missing required parameter: id'] },
+        { successful: false, errors: ['Missing transaction ID'] },
         400
       );
     }
@@ -468,7 +458,7 @@ export async function handleTransactionStatus(request: any): Promise<any> {
 }
 
 /**
- * Verify webhook signature with Next.js
+ * Verify webhook with Next.js
  */
 export async function handleVerifyWebhook(request: any): Promise<any> {
   try {
@@ -486,14 +476,15 @@ export async function handleVerifyWebhook(request: any): Promise<any> {
       );
     }
 
-    const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-      sharedSecret: process.env.FAT_ZEBRA_SHARED_SECRET,
-    });
+    const sharedSecret = process.env.FAT_ZEBRA_SHARED_SECRET;
+    if (!sharedSecret) {
+      return createNextResponse(
+        { successful: false, errors: ['Shared secret not configured'] },
+        500
+      );
+    }
 
-    const isValid = client.verifyWebhookSignature(body, signature);
+    const isValid = verifyWebhookSignature(body, signature, sharedSecret);
     
     if (!isValid) {
       return createNextResponse(
@@ -532,7 +523,7 @@ export async function handleGenerateHash(request: any): Promise<any> {
     }
 
     const body = await request.json();
-    const { reference, amount, currency } = body;
+    const { reference, amount, currency, timestamp } = body;
 
     if (!reference || amount === undefined || !currency) {
       return createNextResponse(
@@ -541,12 +532,22 @@ export async function handleGenerateHash(request: any): Promise<any> {
       );
     }
 
-    const hash = generateVerificationHash({
+    const sharedSecret = process.env.FAT_ZEBRA_SHARED_SECRET;
+    if (!sharedSecret) {
+      return createNextResponse(
+        { successful: false, errors: ['Shared secret not configured'] },
+        500
+      );
+    }
+
+    const hashData = {
       reference,
       amount,
       currency,
-      sharedSecret: process.env.FAT_ZEBRA_SHARED_SECRET || '',
-    });
+      timestamp: timestamp || Date.now()
+    };
+
+    const hash = generateVerificationHash(hashData, sharedSecret);
 
     return createNextResponse({
       successful: true,
@@ -587,14 +588,15 @@ export async function handleEnhancedWebhook(request: any): Promise<any> {
       );
     }
 
-    const client = createFatZebraClient({
-      username: process.env.FAT_ZEBRA_USERNAME!,
-      token: process.env.FAT_ZEBRA_TOKEN!,
-      sandbox: process.env.NODE_ENV !== 'production',
-      sharedSecret: process.env.FAT_ZEBRA_SHARED_SECRET,
-    });
+    const sharedSecret = process.env.FAT_ZEBRA_SHARED_SECRET;
+    if (!sharedSecret) {
+      return createNextResponse(
+        { successful: false, errors: ['Shared secret not configured'] },
+        500
+      );
+    }
 
-    const isValid = client.verifyWebhookSignature(body, signature);
+    const isValid = verifyWebhookSignature(body, signature, sharedSecret);
     
     if (!isValid) {
       return createNextResponse(
@@ -605,6 +607,18 @@ export async function handleEnhancedWebhook(request: any): Promise<any> {
 
     const webhookData: WebhookEvent = JSON.parse(body);
     
+    // Extract the appropriate identifier based on the response type
+    let transactionId: string | undefined;
+    const responseObject = webhookData.data.object;
+    
+    if ('id' in responseObject) {
+      // TransactionResponse or SettlementResponse
+      transactionId = responseObject.id;
+    } else if ('token' in responseObject) {
+      // TokenizationResponse
+      transactionId = responseObject.token;
+    }
+    
     // Here you would typically update your database
     // Example: await updatePaymentStatus(webhookData);
     
@@ -613,7 +627,7 @@ export async function handleEnhancedWebhook(request: any): Promise<any> {
       verified: true,
       processed: true,
       event_type: webhookData.type,
-      transaction_id: webhookData.data?.id
+      transaction_id: transactionId
     });
   } catch (error) {
     console.error('Enhanced webhook error:', error);

@@ -3,6 +3,9 @@
  * Now supports both Next.js and standalone environments
  */
 
+// FIXED: Import both extractErrorMessage and generateVerificationHash for local use within this file
+import { extractErrorMessage, generateVerificationHash } from '../utils';
+
 // Re-export client for server-side use
 export {
   createFatZebraClient,
@@ -156,69 +159,50 @@ export function getRouteHandlers() {
   };
 }
 
-// Helper function for creating Express.js compatible middleware
-export function createExpressHandler(handler: any) {
-  return async (req: any, res: any) => {
-    try {
-      // Convert Express request to our standard format
-      const request = {
-        method: req.method,
-        headers: req.headers,
-        body: JSON.stringify(req.body),
-        url: req.url,
-        json: () => Promise.resolve(req.body)
-      };
+// Standalone HTTP server wrapper for non-Next.js environments
+export function createStandaloneServer(handlers: Record<string, any>) {
+  
+  return (req: any, res: any) => {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const path = url.pathname;
+    const method = req.method;
 
-      const response = await handler(request);
-      
-      // Convert our response to Express format
-      if (response && typeof response === 'object') {
-        if (response.status) {
-          res.status(response.status);
-        }
-        if (response.headers) {
-          Object.entries(response.headers).forEach(([key, value]) => {
-            res.setHeader(key, value);
-          });
-        }
-        if (response.body) {
-          res.send(response.body);
-        } else {
-          res.json(response);
-        }
-      } else {
-        res.json(response);
-      }
-    } catch (error) {
-      console.error('Handler error:', error);
-      res.status(500).json({
-        successful: false,
-        errors: [extractErrorMessage(error)]
-      });
+    // Simple routing based on path
+    let handler: any = null;
+    
+    if (path.startsWith('/api/payments') && method === 'POST') {
+      handler = handlers.purchase;
+    } else if (path.startsWith('/api/auth') && method === 'POST') {
+      handler = handlers.authorization;
+    } else if (path.startsWith('/api/refunds') && method === 'POST') {
+      handler = handlers.refund;
+    } else if (path.startsWith('/api/tokenize') && method === 'POST') {
+      handler = handlers.tokenization;
+    } else if (path.startsWith('/api/health') && method === 'GET') {
+      handler = handlers.healthCheck;
     }
-  };
-}
 
-// Helper function for creating standard HTTP server handlers
-export function createHttpHandler(handler: any) {
-  return async (req: any, res: any) => {
+    if (!handler) {
+      res.statusCode = 404;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+
     try {
+      // Collect request body
       let body = '';
-      
-      // Read request body
       req.on('data', (chunk: any) => {
         body += chunk.toString();
       });
-      
+
       req.on('end', async () => {
         try {
-          // Convert HTTP request to our standard format
           const request = {
-            method: req.method,
-            headers: req.headers,
-            body: body || null,
+            method,
             url: req.url,
-            json: () => Promise.resolve(body ? JSON.parse(body) : null)
+            headers: req.headers,
+            body: body ? JSON.parse(body) : null
           };
 
           const response = await handler(request);
@@ -339,7 +323,7 @@ export async function generateAccessToken(request: any): Promise<any> {
 
     const response = {
       successful: false,
-      errors: [extractErrorMessage(error)]
+      errors: [extractErrorMessage(error)] // FIXED: Now this function is properly imported
     };
 
     if (checkNextJSAvailability()) {
@@ -408,8 +392,8 @@ export async function generateVerificationHashRoute(request: any): Promise<any> 
       reference,
       amount,
       currency,
-      sharedSecret: process.env.FAT_ZEBRA_SHARED_SECRET || '',
-    });
+      timestamp: Date.now()
+    }, process.env.FAT_ZEBRA_SHARED_SECRET || '');
 
     const responseData = {
       successful: true,
@@ -436,7 +420,7 @@ export async function generateVerificationHashRoute(request: any): Promise<any> 
 
     const response = {
       successful: false,
-      errors: [extractErrorMessage(error)]
+      errors: [extractErrorMessage(error)] // FIXED: Now this function is properly imported
     };
 
     if (checkNextJSAvailability()) {

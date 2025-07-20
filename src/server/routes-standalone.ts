@@ -3,19 +3,17 @@
  * These handlers can be used with Express, Koa, or any HTTP server
  */
 
-import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../lib/client';
-import { generateVerificationHash, extractErrorMessage, extractErrorDetails } from '../utils';
+import { createFatZebraClient, FatZebraError } from '../lib/client';
+import { generateVerificationHash, extractErrorMessage } from '../utils';
 import type { 
   PurchaseRequest, 
   AuthorizationRequest,
   RefundRequest,
-  TokenizationRequest,
-  WebhookEvent 
+  TokenizationRequest
 } from '../types';
 import { 
   createResponse, 
   extractRequestData, 
-  getClientIP, 
   type StandaloneRequest, 
   type StandaloneResponse 
 } from './types';
@@ -38,7 +36,7 @@ export async function handleHealthCheck(request: StandaloneRequest): Promise<Sta
     return createResponse({
       status: 'ok',
       timestamp: new Date().toISOString(),
-      version: process.env.npm_package_version || '0.3.9',
+      version: process.env.npm_package_version || '0.3.10',
       mode: 'standalone'
     });
   } catch (error) {
