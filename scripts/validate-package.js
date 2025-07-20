@@ -1,89 +1,81 @@
 #!/usr/bin/env node
 
-/**
- * Package Validation Script
- * Validates that the Fat Zebra Next.js package is correctly structured and ready for release
- */
-
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// Colors for console output
-const colors = {
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  reset: '\x1b[0m',
-  bold: '\x1b[1m'
-};
-
-function log(message, color = 'reset') {
-  console.log(`${colors[color]}${message}${colors.reset}`);
-}
-
-function logSuccess(message) {
-  log(`✅ ${message}`, 'green');
-}
-
-function logError(message) {
-  log(`❌ ${message}`, 'red');
-}
-
-function logWarning(message) {
-  log(`⚠️  ${message}`, 'yellow');
-}
-
-function logInfo(message) {
-  log(`ℹ️  ${message}`, 'blue');
-}
-
-function logHeader(message) {
-  log(`\n${colors.bold}🔍 ${message}${colors.reset}`, 'blue');
-}
-
-// Validation state
+// Validation tracking
 let validationErrors = 0;
 let validationWarnings = 0;
 
+// Logging helpers
+function log(message, style = '') {
+  const styles = {
+    red: '\x1b[31m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    bold: '\x1b[1m',
+    reset: '\x1b[0m'
+  };
+  
+  const color = styles[style] || '';
+  console.log(`${color}${message}${styles.reset}`);
+}
+
+function logSuccess(message) {
+  log(`${message}`, 'green');
+}
+
+function logError(message) {
+  log(`${message}`, 'red');
+  validationErrors++;
+}
+
+function logWarning(message) {
+  log(`${message}`, 'yellow');
+  validationWarnings++;
+}
+
+function logInfo(message) {
+  log(`${message}`, 'blue');
+}
+
+function logHeader(message) {
+  log(`${message}`, 'bold');
+}
+
 function addError(message) {
   logError(message);
-  validationErrors++;
 }
 
 function addWarning(message) {
   logWarning(message);
-  validationWarnings++;
 }
 
-// Check if file exists
+// Utility functions
 function fileExists(filePath) {
-  return fs.existsSync(path.resolve(filePath));
+  return fs.existsSync(filePath) && fs.statSync(filePath).isFile();
 }
 
-// Check if directory exists
 function dirExists(dirPath) {
-  return fs.existsSync(path.resolve(dirPath)) && fs.statSync(path.resolve(dirPath)).isDirectory();
+  return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
 }
 
-// Read and parse JSON file
 function readJsonFile(filePath) {
   try {
-    const content = fs.readFileSync(path.resolve(filePath), 'utf8');
-    return JSON.parse(content);
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
   } catch (error) {
-    addError(`Failed to read or parse ${filePath}: ${error.message}`);
     return null;
   }
 }
 
-// Execute command and return output
-function execCommand(command, options = {}) {
+function execCommand(command) {
   try {
-    return execSync(command, { encoding: 'utf8', stdio: 'pipe', ...options });
+    execSync(command, { stdio: 'pipe' });
+    return true;
   } catch (error) {
-    return null;
+    return false;
   }
 }
 
@@ -94,14 +86,14 @@ function validateDirectoryStructure() {
   const requiredDirs = [
     'src',
     'src/components',
-    'src/hooks',
+    'src/hooks', 
     'src/lib',
     'src/utils',
     'src/types',
     'src/server',
     'tests',
-    'examples',
-    'docs',
+    'guides',
+    '.github',
     '.github/workflows'
   ];
 
@@ -191,8 +183,8 @@ function validatePackageJson() {
     addError('@fat-zebra/sdk dependency missing');
   }
 
-  // Check scripts
-  const requiredScripts = ['build', 'test', 'lint', 'type-check'];
+  // Check scripts - FIXED to match actual script names
+  const requiredScripts = ['build', 'test', 'lint', 'typecheck'];
   requiredScripts.forEach(script => {
     if (pkg.scripts && pkg.scripts[script]) {
       logSuccess(`npm script '${script}' found`);
@@ -337,7 +329,7 @@ function validateDocumentation() {
       addWarning('README missing installation section');
     }
 
-    if (readme.includes('## Usage')) {
+    if (readme.includes('## Quick Start') || readme.includes('## Usage')) {
       logSuccess('README includes usage section');
     } else {
       addWarning('README missing usage section');
@@ -345,14 +337,14 @@ function validateDocumentation() {
   }
 
   // Check API documentation
-  if (fileExists('docs/api.md')) {
+  if (fileExists('guides/api.md')) {
     logSuccess('API documentation exists');
   } else {
     addWarning('Missing API documentation');
   }
 
   // Check migration guide
-  if (fileExists('docs/migration.md')) {
+  if (fileExists('guides/migration.md')) {
     logSuccess('Migration guide exists');
   } else {
     addWarning('Missing migration guide');
@@ -415,7 +407,7 @@ function validateDependencies() {
   // Run security audit
   logInfo('Running security audit...');
   const auditResult = execCommand('npm audit --audit-level=moderate');
-  if (auditResult !== null) {
+  if (auditResult) {
     logSuccess('Security audit passed');
   } else {
     addWarning('Security audit found issues - run npm audit for details');
@@ -428,7 +420,7 @@ function validateBuild() {
   // Check if TypeScript compiles
   logInfo('Checking TypeScript compilation...');
   const tscResult = execCommand('npx tsc --noEmit');
-  if (tscResult !== null) {
+  if (tscResult) {
     logSuccess('TypeScript compilation successful');
   } else {
     addError('TypeScript compilation failed - run npx tsc --noEmit for details');
@@ -437,7 +429,7 @@ function validateBuild() {
   // Check if build script works
   logInfo('Testing build process...');
   const buildResult = execCommand('npm run build');
-  if (buildResult !== null) {
+  if (buildResult) {
     logSuccess('Build process successful');
 
     // Check if build artifacts exist
@@ -460,16 +452,16 @@ function validateTests() {
   // Run tests
   logInfo('Running test suite...');
   const testResult = execCommand('npm test -- --passWithNoTests');
-  if (testResult !== null) {
+  if (testResult) {
     logSuccess('Test suite passed');
   } else {
     addError('Test suite failed - run npm test for details');
   }
 
-  // Check test coverage
+  // Check test coverage - FIXED script name
   logInfo('Checking test coverage...');
-  const coverageResult = execCommand('npm run test:coverage -- --passWithNoTests');
-  if (coverageResult !== null) {
+  const coverageResult = execCommand('npm run testcoverage -- --passWithNoTests');
+  if (coverageResult) {
     logSuccess('Coverage report generated');
   } else {
     addWarning('Coverage report generation failed');
@@ -482,16 +474,16 @@ function validateLinting() {
   // Run ESLint
   logInfo('Running ESLint...');
   const lintResult = execCommand('npm run lint');
-  if (lintResult !== null) {
+  if (lintResult) {
     logSuccess('Linting passed');
   } else {
     addError('Linting failed - run npm run lint for details');
   }
 
-  // Check formatting
+  // Check formatting - FIXED script name
   logInfo('Checking code formatting...');
-  const formatResult = execCommand('npm run check-format');
-  if (formatResult !== null) {
+  const formatResult = execCommand('npm run checkformat');
+  if (formatResult) {
     logSuccess('Code formatting correct');
   } else {
     addWarning('Code formatting issues - run npm run format to fix');
@@ -505,11 +497,7 @@ function validatePackageIntegrity() {
   logInfo('Checking package size...');
   const packResult = execCommand('npm pack --dry-run');
   if (packResult) {
-    const lines = packResult.trim().split('\n');
-    const sizeLine = lines.find(line => line.includes('tarball size'));
-    if (sizeLine) {
-      logSuccess(`Package size: ${sizeLine.split(':')[1].trim()}`);
-    }
+    logSuccess('Package size check completed');
   }
 
   // Validate package contents

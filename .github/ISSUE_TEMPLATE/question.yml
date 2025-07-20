@@ -1,0 +1,85 @@
+name: Question/Support
+description: Ask a question about using the Fat Zebra Next.js library
+title: "[Question]: "
+labels: ["question", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before asking a question, please check:
+        - [API Documentation](https://github.com/your-org/fat-zebra-nextjs/blob/main/docs/api.md)
+        - [Migration Guide](https://github.com/your-org/fat-zebra-nextjs/blob/main/docs/migration.md)
+        - [Examples](https://github.com/your-org/fat-zebra-nextjs/tree/main/examples)
+        - [Existing Issues](https://github.com/your-org/fat-zebra-nextjs/issues)
+
+  - type: input
+    id: version
+    attributes:
+      label: Library Version
+      description: What version of @fwc/fat-zebra-nextjs are you using?
+      placeholder: "0.5.6"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Question Category
+      description: What type of question is this?
+      options:
+        - Setup/Installation
+        - Payment Processing
+        - OAuth Authentication
+        - 3DS2/3D Secure
+        - Server-side Integration
+        - TypeScript Types
+        - Error Handling
+        - Testing
+        - Performance
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Provide any relevant context about what you're trying to achieve
+      placeholder: I'm building a checkout page and...
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What Have You Tried
+      description: What have you already tried to solve this?
+      placeholder: I tried looking at...
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code Sample
+      description: If applicable, share relevant code
+      render: typescript
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have checked the documentation
+          required: true
+        - label: I have searched existing issues
+          required: true
+        - label: This is not a bug report (use the bug template for bugs)
+          required: true

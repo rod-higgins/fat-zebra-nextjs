@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Fat Zebra Support
+    url: https://www.fatzebra.com/support
+    about: For issues directly related to Fat Zebra's API or account
+  - name: Fat Zebra Documentation
+    url: https://docs.fatzebra.com
+    about: Official Fat Zebra API documentation
+  - name: Security Issues
+    url: mailto:security@fatzebra.com
+    about: Report security vulnerabilities privately via email
