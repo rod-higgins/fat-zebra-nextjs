@@ -1,6 +1,6 @@
 {
   "name": "@fwcgovau/fat-zebra-nextjs",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "description": "Fat Zebra payment processing library for Next.js and standalone environments",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",

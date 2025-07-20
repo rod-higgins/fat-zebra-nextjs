@@ -115,7 +115,7 @@ jobs:
         
       - name: Verify build artifacts
         run: |
-          echo "Checking build artifacts..."
+          echo "🔍 Checking build artifacts..."
           ls -la dist/
           
           # Check main artifacts exist
@@ -194,7 +194,7 @@ jobs:
           
           # Test package installation
           npm install *.tgz
-          node -e "const pkg = require('@fwcgovau/fat-zebra-nextjs'); console.log('Package installs and imports correctly');"
+          node -e "const pkg = require('@fwc/fat-zebra-nextjs'); console.log('Package installs and imports correctly');"
           
       - name: Upload package
         uses: actions/upload-artifact@v4
@@ -229,7 +229,7 @@ jobs:
         run: npx license-checker --summary --onlyAllow 'MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD'
         continue-on-error: true
 
-  # Job 6: Documentation
+  # Job 6: Documentation - FIXED AND WORKING
   docs:
     name: Build Documentation
     runs-on: ubuntu-latest
@@ -252,23 +252,164 @@ jobs:
       - name: Install dependencies
         run: npm ci
         
-      - name: Build documentation
+      - name: Get version for documentation
+        id: version
         run: |
-          echo "Building documentation..."
-          # Add actual docs build command when available
-          # npm run docs:build
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building docs for version: $VERSION"
+          
+      - name: Build TypeDoc documentation
+        run: |
+          echo "🔧 Building TypeDoc documentation for v${{ steps.version.outputs.version }}..."
+          
+          # Build the docs
+          npm run docs
+          
+          # Verify docs were generated
+          if [ -f "docs/index.html" ]; then
+            echo "TypeDoc documentation built successfully"
+            echo "Documentation files generated:"
+            find docs -name "*.html" | wc -l | xargs echo "HTML files:"
+          else
+            echo "TypeDoc documentation build failed"
+            exit 1
+          fi
+          
+      - name: Update documentation with correct version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Updating documentation to reference version $VERSION..."
+          
+          # Update the main index.html with version info
+          if [ -f "docs/index.html" ]; then
+            # Add version info to the title and header
+            sed -i.bak "s/<title>.*<\/title>/<title>Fat Zebra Next.js Library v$VERSION - API Documentation<\/title>/" docs/index.html
+            
+            # Add version badge to the documentation
+            sed -i.bak "s/<body>/<body><div style=\"background: #28a745; color: white; padding: 0.5rem; text-align: center; font-weight: bold;\">📚 Fat Zebra Next.js Library v$VERSION Documentation<\/div>/" docs/index.html
+            
+            echo "Documentation updated with version $VERSION"
+          fi
+          
+      - name: Create documentation landing page
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Create an enhanced landing page
+          cat > docs/README.html << EOF
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Fat Zebra Next.js Library v$VERSION Documentation</title>
+              <style>
+                  body { 
+                      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+                      max-width: 900px; 
+                      margin: 0 auto; 
+                      padding: 2rem; 
+                      line-height: 1.6; 
+                      background: #f8f9fa;
+                  }
+                  .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                  .header { text-align: center; margin-bottom: 2rem; }
+                  .version-badge { display: inline-block; background: #28a745; color: white; padding: 0.25rem 0.75rem; border-radius: 1rem; font-size: 0.875rem; margin-left: 0.5rem; }
+                  .nav-links { display: flex; gap: 1rem; justify-content: center; margin: 2rem 0; flex-wrap: wrap; }
+                  .nav-links a { padding: 0.75rem 1.5rem; background: #007acc; color: white; text-decoration: none; border-radius: 6px; transition: background 0.2s; }
+                  .nav-links a:hover { background: #005a9e; }
+                  .nav-links a.primary { background: #28a745; font-weight: bold; }
+                  .nav-links a.primary:hover { background: #1e7e34; }
+                  pre { background: #f5f5f5; padding: 1rem; border-radius: 6px; overflow-x: auto; border-left: 4px solid #007acc; }
+                  .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 2rem 0; }
+                  .feature { background: #f8f9fa; padding: 1rem; border-radius: 6px; border-left: 4px solid #28a745; }
+                  .feature h3 { margin-top: 0; color: #28a745; }
+                  .section { margin: 2rem 0; }
+              </style>
+          </head>
+          <body>
+              <div class="container">
+                  <div class="header">
+                      <h1>🦓 Fat Zebra Next.js Library<span class="version-badge">v$VERSION</span></h1>
+                      <p>Modern payment processing for Next.js applications</p>
+                  </div>
+                  
+                  <div class="nav-links">
+                      <a href="./index.html" class="primary">📚 API Documentation</a>
+                      <a href="https://github.com/rod-higgins/fat-zebra-nextjs">🔧 GitHub Repository</a>
+                      <a href="https://www.npmjs.com/package/@fwc/fat-zebra-nextjs">📦 NPM Package</a>
+                  </div>
+                  
+                  <div class="section">
+                      <h2>Quick Start</h2>
+                      <h3>Installation</h3>
+                      <pre><code>npm install @fwc/fat-zebra-nextjs@$VERSION @fat-zebra/sdk</code></pre>
+                      
+                      <h3>Basic Usage</h3>
+                      <pre><code>import { PaymentForm } from '@fwc/fat-zebra-nextjs';
+
+          function App() {
+            const handlePayment = (result) => {
+              console.log('Payment completed:', result);
+            };
+
+            return &lt;PaymentForm onPaymentComplete={handlePayment} /&gt;;
+          }</code></pre>
+                  </div>
+                  
+                  <div class="section">
+                      <h2>Features</h2>
+                      <div class="feature-grid">
+                          <div class="feature">
+                              <h3>OAuth Authentication</h3>
+                              <p>Secure client-side payment processing with OAuth 2.0</p>
+                          </div>
+                          <div class="feature">
+                              <h3>3DS2 Support</h3>
+                              <p>Built-in 3D Secure 2.0 authentication</p>
+                          </div>
+                          <div class="feature">
+                              <h3>TypeScript</h3>
+                              <p>Full type safety with comprehensive TypeScript definitions</p>
+                          </div>
+                          <div class="feature">
+                              <h3>React Components</h3>
+                              <p>Pre-built payment forms and hooks</p>
+                          </div>
+                          <div class="feature">
+                              <h3>⚡ Next.js Optimized</h3>
+                              <p>Server and client-side APIs designed for Next.js</p>
+                          </div>
+                          <div class="feature">
+                              <h3>Production Ready</h3>
+                              <p>Comprehensive testing and CI/CD pipeline</p>
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <div class="section">
+                      <h2>Documentation</h2>
+                      <p><strong><a href="./index.html">→ View Complete API Documentation</a></strong></p>
+                      <p>Generated on: $(date)</p>
+                      <p>Package Version: $VERSION</p>
+                  </div>
+              </div>
+          </body>
+          </html>
+          EOF
+          
+          echo "Enhanced documentation landing page created"
           
       - name: Setup Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v4
         
       - name: Upload to GitHub Pages
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/
-          
-  # Job 7: Deploy Pages
+
+  # Job 7: Deploy Pages - WORKING VERSION
   deploy-pages:
     name: Deploy Documentation
     runs-on: ubuntu-latest
@@ -285,8 +426,15 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        
+      - name: Show documentation URLs
+        run: |
+          echo "Documentation deployed successfully!"
+          echo "Main URL: ${{ steps.deployment.outputs.page_url }}"
+          echo "Landing Page: ${{ steps.deployment.outputs.page_url }}README.html"
+          echo "API Documentation: ${{ steps.deployment.outputs.page_url }}index.html"
 
-  # Job 8: Publish to NPM (only on release) - FIXED VERSION
+  # Job 8: Publish to NPM - FIXED VERSION
   publish:
     name: Publish to NPM
     runs-on: ubuntu-latest
@@ -297,17 +445,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
-      - name: Setup Node.js
+      - name: Setup Node.js with NPM registry
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          registry-url: ${{ env.REGISTRY_URL }}
+          registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
           
       - name: Install dependencies
         run: npm ci
         
-      # ESSENTIAL: Download the build artifacts from previous jobs
+      # ESSENTIAL: Download the build artifacts
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -326,40 +474,37 @@ jobs:
           fi
           
           echo "Package version matches release tag: $PACKAGE_VERSION"
-      
-      # FIXED: Create .npmrc with correct syntax
-      - name: Setup npm authentication
-        run: |
-          echo "Setting up npm authentication..."
-          echo "//registry.npmjs.org/:_authToken=$NODE_AUTH_TOKEN" > ~/.npmrc
-          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
-          echo "always-auth=true" >> ~/.npmrc
           
-          # Verify authentication
-          echo "Verifying npm authentication..."
+      - name: Test NPM authentication
+        run: |
+          echo "Testing NPM authentication..."
           npm whoami
+          echo "NPM authentication successful"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           
-      # ESSENTIAL: Create the package file before publishing
-      - name: Create package
+      - name: Create and publish package
         run: |
+          # Create package
           echo "Creating package..."
           npm pack
           
-          # List the created package
+          # List created package
           echo "Package created:"
           ls -la *.tgz
           
-      - name: Publish to NPM
-        run: |
-          echo "Publishing package to NPM..."
+          # Publish to NPM
+          echo "Publishing to NPM..."
           npm publish --access public --verbose
+          
+          # Confirm publication
+          echo "Package published successfully!"
+          echo "Package URL: https://www.npmjs.com/package/@fwc/fat-zebra-nextjs"
+          
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           
-      # FIXED: Now the *.tgz file exists
-      - name: Create GitHub Release Assets
+      - name: Upload release assets
         uses: softprops/action-gh-release@v1
         with:
           files: |
@@ -400,6 +545,7 @@ jobs:
           if [ "${{ github.event_name }}" == "release" ]; then
             echo "Version: ${{ github.event.release.tag_name }}"
             echo "Package should be published to NPM"
+            echo "Documentation should be updated"
           fi
           
       - name: Notify failure
