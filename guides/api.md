@@ -1,6 +1,6 @@
 # API Reference
 
-Complete API reference for `@fwc/fat-zebra-nextjs`.
+Complete API reference for `@fwcgovau/fat-zebra-nextjs`.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ Complete API reference for `@fwc/fat-zebra-nextjs`.
 A complete payment form component with built-in validation and 3DS2 support.
 
 ```typescript
-import { PaymentForm } from '@fwc/fat-zebra-nextjs';
+import { PaymentForm } from '@fwcgovau/fat-zebra-nextjs';
 
 <PaymentForm
   onSubmit={handlePayment}
@@ -60,7 +60,7 @@ import { PaymentForm } from '@fwc/fat-zebra-nextjs';
 Individual card input component for custom forms.
 
 ```typescript
-import { CardInput } from '@fwc/fat-zebra-nextjs';
+import { CardInput } from '@fwcgovau/fat-zebra-nextjs';
 
 <CardInput
   value={cardNumber}
@@ -153,7 +153,7 @@ const {
 Create a server-side Fat Zebra client.
 
 ```typescript
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 
 const client = createFatZebraClient({
   username: 'your-username',
@@ -297,7 +297,7 @@ class FatZebraError extends Error {
 ### Card Validation
 
 ```typescript
-import { validateCard, formatCardNumber, getCardType } from '@fwc/fat-zebra-nextjs/utils';
+import { validateCard, formatCardNumber, getCardType } from '@fwcgovau/fat-zebra-nextjs/utils';
 
 // Validate card number
 const isValid = validateCard('4005550000000001');
@@ -314,7 +314,7 @@ const cardType = getCardType('4005550000000001');
 ### Amount Formatting
 
 ```typescript
-import { formatAmount, parseAmount } from '@fwc/fat-zebra-nextjs/utils';
+import { formatAmount, parseAmount } from '@fwcgovau/fat-zebra-nextjs/utils';
 
 // Format cents to dollars
 const formatted = formatAmount(1000, 'AUD');
@@ -332,7 +332,7 @@ const cents = parseAmount('$10.00');
 The library provides specific error types for different scenarios:
 
 ```typescript
-import { FatZebraError, ValidationError, NetworkError } from '@fwc/fat-zebra-nextjs';
+import { FatZebraError, ValidationError, NetworkError } from '@fwcgovau/fat-zebra-nextjs';
 
 try {
   await processPayment(paymentData);

@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.6] - 2025-07-20 - **FIRST NPM RELEASE** 🎉
 
 ### Added
-- **🚀 First NPM Publication**: Package now available on npm registry as `@fwc/fat-zebra-nextjs@0.5.6`
+- **🚀 First NPM Publication**: Package now available on npm registry as `@fwcgovau/fat-zebra-nextjs@0.5.6`
 - Complete CI/CD pipeline with GitHub Actions for automated testing, building, and publishing
 - Comprehensive package validation script with pre-publish checks
 - Production-ready build artifacts with proper ES modules and CommonJS support
@@ -100,7 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### v0.5.6 - First NPM Release
 
-This is a significant milestone as the first version of `@fwc/fat-zebra-nextjs` to be published to the npm registry. The package is now production-ready with:
+This is a significant milestone as the first version of `@fwcgovau/fat-zebra-nextjs` to be published to the npm registry. The package is now production-ready with:
 
 - ✅ All tests passing
 - ✅ Complete build pipeline
@@ -112,7 +112,7 @@ This is a significant milestone as the first version of `@fwc/fat-zebra-nextjs` 
 ### Installation
 
 ```bash
-npm install @fwc/fat-zebra-nextjs @fat-zebra/sdk
+npm install @fwcgovau/fat-zebra-nextjs @fat-zebra/sdk
 ```
 
 ### Key Features
@@ -130,7 +130,7 @@ If you were using a pre-release version, update to the official npm package:
 
 ```bash
 npm uninstall your-previous-package
-npm install @fwc/fat-zebra-nextjs @fat-zebra/sdk
+npm install @fwcgovau/fat-zebra-nextjs @fat-zebra/sdk
 ```
 
 No code changes are required for migration from v0.5.5 to v0.5.6.

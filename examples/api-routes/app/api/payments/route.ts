@@ -1,8 +1,8 @@
 // Standard payment processing endpoint for Next.js app directory
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwc/fat-zebra-nextjs/server';
-import { PurchaseRequest } from '@fwc/fat-zebra-nextjs';
+import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwcgovau/fat-zebra-nextjs/server';
+import { PurchaseRequest } from '@fwcgovau/fat-zebra-nextjs';
 
 // Initialize Fat Zebra client
 const client = createFatZebraClient({
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
 // Payment processing with tokenized cards
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwcgovau/fat-zebra-nextjs/server';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,
@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
 // OAuth token generation for 3DS2
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,
@@ -251,8 +251,8 @@ export async function POST(request: NextRequest) {
 // Card tokenization endpoint
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwc/fat-zebra-nextjs/server';
-import { TokenizationRequest } from '@fwc/fat-zebra-nextjs';
+import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwcgovau/fat-zebra-nextjs/server';
+import { TokenizationRequest } from '@fwcgovau/fat-zebra-nextjs';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,
@@ -323,8 +323,8 @@ export async function POST(request: NextRequest) {
 // Refund processing endpoint
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwc/fat-zebra-nextjs/server';
-import { RefundRequest } from '@fwc/fat-zebra-nextjs';
+import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwcgovau/fat-zebra-nextjs/server';
+import { RefundRequest } from '@fwcgovau/fat-zebra-nextjs';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,
@@ -387,8 +387,8 @@ export async function POST(request: NextRequest) {
 // Webhook handler for Fat Zebra events
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
-import { WebhookEvent } from '@fwc/fat-zebra-nextjs';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
+import { WebhookEvent } from '@fwcgovau/fat-zebra-nextjs';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,
@@ -470,7 +470,7 @@ export async function POST(request: NextRequest) {
 // Health check endpoint
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,

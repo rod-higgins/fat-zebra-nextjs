@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwc/fat-zebra-nextjs/server';
-import { validateAmount, isValidEmail } from '@fwc/fat-zebra-nextjs/utils';
+import { createFatZebraClient, handleFatZebraResponse, FatZebraError } from '@fwcgovau/fat-zebra-nextjs/server';
+import { validateAmount, isValidEmail } from '@fwcgovau/fat-zebra-nextjs/utils';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,

@@ -1,8 +1,8 @@
 // Complete e-commerce checkout implementation with Fat Zebra integration
 
 import React, { useState, useEffect } from 'react';
-import { PaymentForm, usePayment, useOAuthPayment } from '@fwc/fat-zebra-nextjs';
-import type { PaymentFormData } from '@fwc/fat-zebra-nextjs';
+import { PaymentForm, usePayment, useOAuthPayment } from '@fwcgovau/fat-zebra-nextjs';
+import type { PaymentFormData } from '@fwcgovau/fat-zebra-nextjs';
 
 // Types for our e-commerce example
 interface CartItem {

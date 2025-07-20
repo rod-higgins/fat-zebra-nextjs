@@ -1,8 +1,8 @@
 // Basic payment form implementation using the Fat Zebra Next.js library
 
 import React, { useState } from 'react';
-import { PaymentForm, usePayment } from '@fwc/fat-zebra-nextjs';
-import type { PaymentFormData } from '@fwc/fat-zebra-nextjs';
+import { PaymentForm, usePayment } from '@fwcgovau/fat-zebra-nextjs';
+import type { PaymentFormData } from '@fwcgovau/fat-zebra-nextjs';
 
 // Environment variables should be set in .env.local:
 // FATZEBRA_USERNAME=your_username

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,

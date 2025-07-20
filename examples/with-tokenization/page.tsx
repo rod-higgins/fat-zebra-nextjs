@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { PaymentForm, useOAuthPayment } from '@fwc/fat-zebra-nextjs';
+import { PaymentForm, useOAuthPayment } from '@fwcgovau/fat-zebra-nextjs';
 
 export default function TokenizationExample() {
   const [accessToken, setAccessToken] = useState<string>('');

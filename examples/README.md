@@ -70,7 +70,7 @@ Recurring payment setup with tokenization and subscription management.
 ### Setup
 
 1. Copy any example to your Next.js project
-2. Install the library: `npm install @fwc/fat-zebra-nextjs @fat-zebra/sdk`
+2. Install the library: `npm install @fwcgovau/fat-zebra-nextjs @fat-zebra/sdk`
 3. Configure environment variables:
 
 ```bash
@@ -103,7 +103,7 @@ Use these test card numbers for development:
 ### Client-Side Integration
 
 ```tsx
-import { PaymentForm, usePayment } from '@fwc/fat-zebra-nextjs';
+import { PaymentForm, usePayment } from '@fwcgovau/fat-zebra-nextjs';
 
 function CheckoutPage() {
   const { processPayment, loading, error, success } = usePayment();
@@ -122,7 +122,7 @@ function CheckoutPage() {
 ### Server-Side Integration
 
 ```typescript
-import { createFatZebraClient, handleFatZebraResponse } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient, handleFatZebraResponse } from '@fwcgovau/fat-zebra-nextjs/server';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME!,
@@ -137,7 +137,7 @@ const transaction = handleFatZebraResponse(response);
 ### OAuth + 3DS2 Integration
 
 ```tsx
-import { useOAuthPayment } from '@fwc/fat-zebra-nextjs';
+import { useOAuthPayment } from '@fwcgovau/fat-zebra-nextjs';
 
 function SecureCheckout() {
   const payment = useOAuthPayment(accessToken, username, {

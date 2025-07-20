@@ -14,7 +14,7 @@ body:
     id: version
     attributes:
       label: Library Version
-      description: What version of @fwc/fat-zebra-nextjs are you using?
+      description: What version of @fwcgovau/fat-zebra-nextjs are you using?
       placeholder: "0.5.6"
     validations:
       required: true

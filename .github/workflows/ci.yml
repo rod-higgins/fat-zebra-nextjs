@@ -194,7 +194,7 @@ jobs:
           
           # Test package installation
           npm install *.tgz
-          node -e "const pkg = require('@fwc/fat-zebra-nextjs'); console.log('Package installs and imports correctly');"
+          node -e "const pkg = require('@fwcgovau/fat-zebra-nextjs'); console.log('Package installs and imports correctly');"
           
       - name: Upload package
         uses: actions/upload-artifact@v4

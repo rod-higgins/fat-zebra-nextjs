@@ -17,9 +17,9 @@ A comprehensive TypeScript library for integrating Fat Zebra payment gateway wit
 ## Installation
 
 ```bash
-npm install @fwc/fat-zebra-nextjs @fat-zebra/sdk
+npm install @fwcgovau/fat-zebra-nextjs @fat-zebra/sdk
 # or
-yarn add @fwc/fat-zebra-nextjs @fat-zebra/sdk
+yarn add @fwcgovau/fat-zebra-nextjs @fat-zebra/sdk
 ```
 
 ## Environment Setup
@@ -45,7 +45,7 @@ NODE_ENV=development  # Use 'production' for live mode
 ### Basic Payment Form
 
 ```tsx
-import { PaymentForm, usePayment } from '@fwc/fat-zebra-nextjs';
+import { PaymentForm, usePayment } from '@fwcgovau/fat-zebra-nextjs';
 
 function CheckoutPage() {
   const { loading, error, success, processPayment } = usePayment();
@@ -73,7 +73,7 @@ function CheckoutPage() {
 ### Advanced Usage with OAuth and 3DS2
 
 ```tsx
-import { useOAuthPayment } from '@fwc/fat-zebra-nextjs';
+import { useOAuthPayment } from '@fwcgovau/fat-zebra-nextjs';
 
 function AdvancedCheckout() {
   const { 
@@ -123,7 +123,7 @@ Create these API routes in your Next.js application:
 
 ```typescript
 // pages/api/payment/tokenize.ts
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 
 export default async function handler(req, res) {
   const client = createFatZebraClient({
@@ -143,7 +143,7 @@ export default async function handler(req, res) {
 
 ```typescript
 // pages/api/payment/purchase.ts
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 
 export default async function handler(req, res) {
   const client = createFatZebraClient({
@@ -165,7 +165,7 @@ export default async function handler(req, res) {
 ### Custom Server-side Usage
 
 ```typescript
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 
 const client = createFatZebraClient({
   username: process.env.FATZEBRA_USERNAME,
@@ -339,7 +339,7 @@ FATZEBRA_TOKEN=your_test_token
 
 1. **Update Dependencies**: 
    ```bash
-   npm install @fwc/fat-zebra-nextjs@0.5.6 @fat-zebra/sdk
+   npm install @fwcgovau/fat-zebra-nextjs@0.5.6 @fat-zebra/sdk
    ```
 
 2. **Update Environment Variables**: Add OAuth credentials

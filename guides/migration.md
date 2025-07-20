@@ -1,6 +1,6 @@
 # Migration Guide
 
-This guide helps you migrate between versions of `@fwc/fat-zebra-nextjs`.
+This guide helps you migrate between versions of `@fwcgovau/fat-zebra-nextjs`.
 
 ## Table of Contents
 
@@ -23,7 +23,7 @@ Version 0.5.6 is the first official NPM release. If you were using a pre-release
 npm uninstall your-previous-package
 
 # Install the official NPM package
-npm install @fwc/fat-zebra-nextjs @fat-zebra/sdk
+npm install @fwcgovau/fat-zebra-nextjs @fat-zebra/sdk
 ```
 
 ### No Code Changes Required
@@ -48,7 +48,7 @@ If you were using a development or git-based installation:
 npm uninstall fat-zebra-nextjs
 
 # Install official release
-npm install @fwc/fat-zebra-nextjs @fat-zebra/sdk
+npm install @fwcgovau/fat-zebra-nextjs @fat-zebra/sdk
 ```
 
 ### Update Import Statements
@@ -57,8 +57,8 @@ No import changes needed - all imports remain the same:
 
 ```typescript
 // These imports work exactly the same
-import { PaymentForm, usePayment } from '@fwc/fat-zebra-nextjs';
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { PaymentForm, usePayment } from '@fwcgovau/fat-zebra-nextjs';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 ```
 
 ## Legacy/Custom Implementation → v0.5.6
@@ -70,7 +70,7 @@ If you're migrating from a custom Fat Zebra implementation to this library:
 #### 1. Install Dependencies
 
 ```bash
-npm install @fwc/fat-zebra-nextjs @fat-zebra/sdk
+npm install @fwcgovau/fat-zebra-nextjs @fat-zebra/sdk
 ```
 
 #### 2. Environment Variables
@@ -118,7 +118,7 @@ const handlePayment = async (cardData) => {
 **After:**
 ```typescript
 // Using the library
-import { PaymentForm, usePayment } from '@fwc/fat-zebra-nextjs';
+import { PaymentForm, usePayment } from '@fwcgovau/fat-zebra-nextjs';
 
 const { processPayment, loading, error } = usePayment();
 
@@ -146,7 +146,7 @@ export default async function handler(req, res) {
 **After:**
 ```typescript
 // Using the library
-import { createFatZebraClient } from '@fwc/fat-zebra-nextjs/server';
+import { createFatZebraClient } from '@fwcgovau/fat-zebra-nextjs/server';
 
 export default async function handler(req, res) {
   const client = createFatZebraClient({
@@ -284,7 +284,7 @@ Run your full test suite to ensure:
 
 ### 2. Import Errors
 
-**Issue**: `Module not found: @fwc/fat-zebra-nextjs`
+**Issue**: `Module not found: @fwcgovau/fat-zebra-nextjs`
 **Solution**: Ensure you've installed from npm, not a git repository
 
 ### 3. Type Errors

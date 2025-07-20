@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { PaymentForm, usePayment } from '@fwc/fat-zebra-nextjs';
+import { PaymentForm, usePayment } from '@fwcgovau/fat-zebra-nextjs';
 
 export default function BasicCheckoutPage() {
   const { loading, error, success, processPayment, reset } = usePayment();
