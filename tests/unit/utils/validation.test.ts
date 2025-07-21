@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 
 /**
  * FIXED VALIDATION TESTS - Testing Actual Source Code
@@ -37,10 +37,10 @@ import {
   detectCardType,
   luhnCheck,
   maskCardNumber
-} from '../../src/utils/validation';
+} from '../../../src/utils/validation';
 
 // Import types from the types module
-import type { CardValidationResult } from '../../src/types';
+import type { CardValidationResult } from '../../../src/types';
 
 describe('Validation Utilities - Actual Source Code Tests', () => {
   describe('Card Number Validation', () => {

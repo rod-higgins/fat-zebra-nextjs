@@ -1,12 +1,12 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 
 // Import the test helpers
 const {
   createMockPurchaseRequest,
   createMockTransactionResponse,
   createMockErrorResponse
-} = require('../setup');
+} = require('../../setup');
 
 // Mock fetch for the NextJS routes
 global.fetch = jest.fn();
@@ -36,7 +36,7 @@ describe('routes-nextjs (Enhanced Coverage)', () => {
 
   beforeAll(async () => {
     try {
-      routesNextjs = await import('../../src/server/routes-nextjs');
+      routesNextjs = await import('../../../src/server/routes-nextjs');
     } catch (error) {
       console.error('Failed to import routes-nextjs:', error);
       routesNextjs = {

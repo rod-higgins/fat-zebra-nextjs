@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 
 // Simple test file to replace the malformed formatting.test.ts
 // The actual formatting tests are in validation.test.ts

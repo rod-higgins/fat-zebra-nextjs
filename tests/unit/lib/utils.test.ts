@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 
 // Import the test helpers using CommonJS require syntax to avoid ESM issues
 const {
@@ -7,7 +7,7 @@ const {
   createMockPurchaseRequest,
   createMockTransactionResponse,
   createMockErrorResponse
-} = require('../setup');
+} = require('../../setup');
 
 // Mock utility functions since they might not exist yet
 const mockUtils = {

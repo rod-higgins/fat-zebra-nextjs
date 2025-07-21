@@ -1,12 +1,12 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 
 // Import the test helpers
 const {
   createMockPurchaseRequest,
   createMockTransactionResponse,
   createMockErrorResponse
-} = require('../setup');
+} = require('../../setup');
 
 // Mock fetch for the routes
 global.fetch = jest.fn();
@@ -36,7 +36,7 @@ describe('routes.ts (actual source code)', () => {
   beforeAll(async () => {
     try {
       // Import the actual routes.ts module
-      routes = await import('../../src/server/routes');
+      routes = await import('../../../src/server/routes');
     } catch (error) {
       console.error('Failed to import routes.ts:', error);
       // Create minimal mock if import fails

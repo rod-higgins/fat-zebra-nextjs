@@ -1,6 +1,6 @@
 import React from 'react';
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -10,13 +10,13 @@ const {
   createMockPurchaseRequest,
   createMockTransactionResponse,
   createMockErrorResponse
-} = require('../setup');
+} = require('../../setup');
 
 // Mock fetch globally before tests
 global.fetch = jest.fn();
 
 // Mock the usePayment hook to prevent real API calls
-jest.mock('../../src/hooks/usePayment', () => ({
+jest.mock('../../../src/hooks/usePayment', () => ({
   usePayment: () => ({
     loading: false,
     error: null,
@@ -32,7 +32,7 @@ describe('PaymentForm Component', () => {
   beforeAll(async () => {
     try {
       // Import the ACTUAL PaymentForm component
-      const module = await import('../../src/components/PaymentForm');
+      const module = await import('../../../src/components/PaymentForm');
       PaymentForm = (module as any).PaymentForm || (module as any).default;
     } catch (error) {
       console.warn('Could not import PaymentForm, skipping tests:', error);

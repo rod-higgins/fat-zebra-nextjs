@@ -1,12 +1,12 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 
 // Import the test helpers
 const {
   createMockPurchaseRequest,
   createMockTransactionResponse,
   createMockErrorResponse
-} = require('../setup');
+} = require('../../setup');
 
 // Mock fetch for the standalone routes
 global.fetch = jest.fn();
@@ -29,7 +29,7 @@ describe('routes-standalone (Enhanced Coverage)', () => {
 
   beforeAll(async () => {
     try {
-      routesStandalone = await import('../../src/server/routes-standalone');
+      routesStandalone = await import('../../../src/server/routes-standalone');
     } catch (error) {
       console.error('Failed to import routes-standalone:', error);
       routesStandalone = {

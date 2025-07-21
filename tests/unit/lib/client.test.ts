@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 
 // Import the test helpers using CommonJS require syntax to avoid ESM issues
 const {
@@ -7,10 +7,10 @@ const {
   createMockPurchaseRequest,
   createMockTransactionResponse,
   createMockErrorResponse
-} = require('../setup');
+} = require('../../setup');
 
 // Import the library modules using TypeScript import syntax
-import { FatZebraClient, createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../../src/lib/client';
+import { FatZebraClient, createFatZebraClient, handleFatZebraResponse, FatZebraError } from '../../../src/lib/client';
 import type { 
   FatZebraConfig, 
   PurchaseRequest, 
@@ -18,7 +18,7 @@ import type {
   FatZebraResponse,
   TokenizationRequest,
   RefundRequest
-} from '../../src/types';
+} from '../../../src/types';
 
 describe('FatZebraClient - Standalone Library Tests', () => {
   let client: FatZebraClient;

@@ -1,18 +1,18 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 import { renderHook, act } from '@testing-library/react';
 
 // Follow the EXACT working pattern from other tests
 describe('usePayment Hook - Comprehensive Tests', () => {
   // Mock inside describe block like working tests
-  jest.mock('../../src/lib/client', () => ({
+  jest.mock('../../../src/lib/client', () => ({
     createFatZebraClient: jest.fn(() => ({
       purchase: jest.fn(),
     })),
     handleFatZebraResponse: jest.fn(),
   }));
 
-  jest.mock('../../src/types', () => ({
+  jest.mock('../../../src/types', () => ({
     FatZebraError: class FatZebraError extends Error {
       public errors: string[];
       
@@ -24,7 +24,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     }
   }));
 
-  jest.mock('../../src/utils', () => ({
+  jest.mock('../../../src/utils', () => ({
     getClientIP: jest.fn(() => '127.0.0.1'),
   }));
 
@@ -33,8 +33,8 @@ describe('usePayment Hook - Comprehensive Tests', () => {
 
   beforeAll(async () => {
     try {
-      const hooks = await import('../../src/hooks/usePayment');
-      const types = await import('../../src/types');
+      const hooks = await import('../../../src/hooks/usePayment');
+      const types = await import('../../../src/types');
       usePayment = hooks.usePayment;
       FatZebraError = types.FatZebraError;
       console.log('Hooks imported successfully');
@@ -274,7 +274,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
 
   describe('Payment Processing - Success Path', () => {
     it('should process payment with correct mock setup', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       
       // Create a response that should pass the hook's validation
       const successfulResponse = {
@@ -322,7 +322,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should handle successful payment with callbacks', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       const onSuccess = jest.fn();
       
       const successResponse = createMockSuccessResponse();
@@ -342,7 +342,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should handle payment with customer data', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       
       const successResponse = createMockSuccessResponse();
       const mockClient = {
@@ -377,7 +377,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should enrich payment data with client IP', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       
       const successResponse = createMockSuccessResponse();
       const mockClient = {
@@ -406,7 +406,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
 
   describe('Error Scenarios', () => {
     it('should handle API errors', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       const onError = jest.fn();
       
       const failureResponse = createMockFailureResponse('Card declined', ['Card declined']);
@@ -432,7 +432,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should handle network errors', async () => {
-      const { createFatZebraClient } = require('../../src/lib/client');
+      const { createFatZebraClient } = require('../../../src/lib/client');
       const onError = jest.fn();
       
       const networkError = new Error('fetch failed');
@@ -457,7 +457,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should handle abort errors', async () => {
-      const { createFatZebraClient } = require('../../src/lib/client');
+      const { createFatZebraClient } = require('../../../src/lib/client');
       
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
@@ -481,7 +481,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should handle generic errors', async () => {
-      const { createFatZebraClient } = require('../../src/lib/client');
+      const { createFatZebraClient } = require('../../../src/lib/client');
       
       const genericError = new Error('Something went wrong');
       const mockClient = {
@@ -506,7 +506,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
 
   describe('Loading State Management', () => {
     it('should manage loading state during payment processing', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       
       const successResponse = createMockSuccessResponse();
       let resolvePayment: any;
@@ -547,7 +547,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should reset loading state after error', async () => {
-      const { createFatZebraClient } = require('../../src/lib/client');
+      const { createFatZebraClient } = require('../../../src/lib/client');
       
       const error = new Error('Payment failed');
       const mockClient = {
@@ -571,7 +571,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
 
   describe('Configuration and Environment', () => {
     it('should create client with environment variables', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       
       process.env.FATZEBRA_USERNAME = 'test-user';
       process.env.FATZEBRA_TOKEN = 'test-token';
@@ -606,7 +606,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should use default configuration when env vars are missing', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       
       const successResponse = createMockSuccessResponse();
       const mockClient = {
@@ -636,7 +636,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should retry failed payments when enabled', async () => {
-      const { createFatZebraClient, handleFatZebraResponse } = require('../../src/lib/client');
+      const { createFatZebraClient, handleFatZebraResponse } = require('../../../src/lib/client');
       
       const error = new Error('Temporary failure');
       const successResponse = createMockSuccessResponse();
@@ -687,7 +687,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should not retry when disabled', async () => {
-      const { createFatZebraClient } = require('../../src/lib/client');
+      const { createFatZebraClient } = require('../../../src/lib/client');
       
       const error = new Error('Payment failed');
       const mockClient = {
@@ -733,7 +733,7 @@ describe('usePayment Hook - Comprehensive Tests', () => {
     });
 
     it('should handle unmount during pending request', () => {
-      const { createFatZebraClient } = require('../../src/lib/client');
+      const { createFatZebraClient } = require('../../../src/lib/client');
       
       const mockClient = {
         purchase: jest.fn().mockImplementation(() => 
@@ -769,7 +769,7 @@ describe('usePaymentWithRetry Hook', () => {
 
   beforeAll(async () => {
     try {
-      const hooks = await import('../../src/hooks/usePayment');
+      const hooks = await import('../../../src/hooks/usePayment');
       usePaymentWithRetry = hooks.usePaymentWithRetry;
       console.log('usePaymentWithRetry imported:', typeof usePaymentWithRetry);
     } catch (error) {

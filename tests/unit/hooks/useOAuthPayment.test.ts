@@ -1,9 +1,9 @@
 import '@testing-library/jest-dom';
-import '../types/jest-custom-matchers';
+import '../../types/jest-custom-matchers';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 // Mock dependencies properly before any imports
-jest.mock('../../src/types', () => ({
+jest.mock('../../../src/types', () => ({
   FatZebraError: class FatZebraError extends Error {
     public errors: string[];
     public response?: any;
@@ -60,8 +60,8 @@ describe('useOAuthPayment Hook - Real Implementation Tests', () => {
       });
 
       // Import the ACTUAL hook implementation
-      const hooks = await import('../../src/hooks/useOAuthPayment');
-      const types = await import('../../src/types');
+      const hooks = await import('../../../src/hooks/useOAuthPayment');
+      const types = await import('../../../src/types');
       
       useOAuthPayment = hooks.useOAuthPayment;
       FatZebraError = types.FatZebraError;
