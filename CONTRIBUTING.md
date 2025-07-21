@@ -1,31 +1,10 @@
-# Contributing to Fat Zebra Next.js Library
+# Contributing to Fat Zebra Next.js Integration
 
-Thank you for your interest in contributing to the Fat Zebra Next.js library! This document provides guidelines and information for contributors.
+Welcome! We're excited that you're interested in contributing to the Fat Zebra Next.js integration library. This guide will help you get started.
 
-## Table of Contents
+## Quick Start
 
-- [Getting Started](#getting-started)
-- [Development Setup](#development-setup)
-- [Contributing Process](#contributing-process)
-- [Coding Standards](#coding-standards)
-- [Testing Guidelines](#testing-guidelines)
-- [Documentation](#documentation)
-- [Reporting Issues](#reporting-issues)
-- [Security](#security)
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+ and npm 8+
-- Git
-- TypeScript knowledge
-- React/Next.js experience
-- Understanding of payment processing concepts
-
-### Development Setup
-
-1. **Fork and Clone**
+1. **Fork the Repository**
    ```bash
    git clone https://github.com/rod-higgins/fat-zebra-nextjs.git
    cd fat-zebra-nextjs
@@ -36,7 +15,7 @@ Thank you for your interest in contributing to the Fat Zebra Next.js library! Th
    npm install
    ```
 
-3. **Environment Setup**
+3. **Set Up Environment**
    ```bash
    cp .env.example .env.local
    # Add your Fat Zebra test credentials
@@ -44,270 +23,232 @@ Thank you for your interest in contributing to the Fat Zebra Next.js library! Th
 
 4. **Run Tests**
    ```bash
-   npm test
-   npm run type-check
-   npm run lint
+   npm run test
    ```
 
-5. **Build Package**
+5. **Start Development**
    ```bash
-   npm run build
+   npm run dev
    ```
 
-## Contributing Process
+## Development Workflow
 
-### 1. Create an Issue
+### Before Making Changes
 
-Before starting work, create an issue describing:
-- The problem you're solving
-- Proposed solution approach
-- Any breaking changes
-- Testing strategy
+1. **Create a Feature Branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
-### 2. Branch Naming
+2. **Ensure Tests Pass**
+   ```bash
+   npm run validate
+   ```
 
-Use descriptive branch names:
-- `feature/add-subscription-support`
-- `fix/payment-form-validation`
-- `docs/update-api-reference`
-- `refactor/client-architecture`
+### Development Commands
 
-### 3. Development Workflow
+- `npm run build` - Build the library
+- `npm run test` - Run test suite
+- `npm run testwatch` - Run tests in watch mode
+- `npm run testcoverage` - Generate coverage report
+- `npm run lint` - Check code style
+- `npm run lintfix` - Fix code style issues
+- `npm run typecheck` - Check TypeScript types
+- `npm run docs` - Generate documentation
 
-1. Create a feature branch from `develop`
-2. Make your changes following our coding standards
-3. Add comprehensive tests
-4. Update documentation
-5. Ensure all checks pass
-6. Submit a pull request
+### Making Changes
 
-### 4. Pull Request Process
-
-- Fill out the PR template completely
-- Link to related issues
-- Add screenshots for UI changes
-- Ensure CI passes
-- Request review from maintainers
-
-## Coding Standards
-
-### TypeScript
-
-- Use strict TypeScript configuration
-- Prefer explicit types over `any`
-- Use proper JSDoc comments for public APIs
-- Follow existing naming conventions
-
-```typescript
-// Good
-interface PaymentRequest {
-  amount: number;
-  currency: string;
-  reference: string;
-}
-
-// Avoid
-interface PaymentRequest {
-  amount: any;
-  currency: any;
-  reference: any;
-}
-```
-
-### React Components
-
-- Use functional components with hooks
-- Prefer named exports for components
-- Include proper TypeScript prop types
-- Handle loading and error states
-
-```typescript
-// Good
-export const PaymentForm: React.FC<PaymentFormProps> = ({
-  onSubmit,
-  loading = false,
-  ...props
-}) => {
-  // Component implementation
-};
-
-// Component prop types
-export interface PaymentFormProps {
-  onSubmit: (data: PaymentFormData) => Promise<void>;
-  loading?: boolean;
-}
-```
-
-### Error Handling
-
-- Create custom error types for specific use cases
-- Provide helpful error messages
-- Include error codes when applicable
-- Log errors appropriately
-
-```typescript
-export class FatZebraError extends Error {
-  public errors: string[];
-  public code?: string;
-
-  constructor(message: string, errors: string[] = [], code?: string) {
-    super(message);
-    this.name = 'FatZebraError';
-    this.errors = errors;
-    this.code = code;
-  }
-}
-```
-
-### Code Organization
-
-```
-src/
-├── components/          # React components
-├── hooks/              # Custom React hooks
-├── lib/                # Core library code
-├── server/             # Server-side utilities
-├── types/              # TypeScript type definitions
-└── utils/              # Utility functions
-```
+1. **Write Tests First**: Add tests for new functionality
+2. **Follow TypeScript Standards**: Ensure type safety
+3. **Update Documentation**: Update relevant docs and examples
+4. **Run Validation**: `npm run validate` before committing
 
 ## Testing Guidelines
 
-### Test Coverage
+### Test Structure
 
-- Maintain >80% test coverage
-- Test both happy path and error scenarios
-- Include integration tests for critical flows
-- Mock external dependencies appropriately
+- **Unit Tests**: Test individual functions and components
+- **Integration Tests**: Test component interactions
+- **E2E Tests**: Test complete payment flows
 
-### Unit Tests
+### Test Commands
 
-```typescript
-describe('validateCard', () => {
-  it('should validate correct card numbers', () => {
-    const result = validateCard('4005550000000001');
-    expect(result.isValid).toBe(true);
-    expect(result.cardType).toBe('Visa');
-  });
+```bash
+# Run all tests
+npm run test
 
-  it('should reject invalid card numbers', () => {
-    const result = validateCard('invalid');
-    expect(result.isValid).toBe(false);
-    expect(result.errors.length).toBeGreaterThan(0);
-  });
-});
+# Run tests in watch mode
+npm run testwatch
+
+# Generate coverage report
+npm run testcoverage
+
+# Run specific test file
+npm run test -- PaymentForm.test.tsx
 ```
 
-### Component Tests
+### Writing Tests
 
 ```typescript
+import { render, screen, fireEvent } from '@testing-library/react';
+import { PaymentForm } from '../PaymentForm';
+
 describe('PaymentForm', () => {
-  it('should submit form with valid data', async () => {
-    const mockOnSubmit = jest.fn().mockResolvedValue(undefined);
-    render(<PaymentForm onSubmit={mockOnSubmit} />);
+  it('should render payment form', () => {
+    render(<PaymentForm onSubmit={jest.fn()} />);
+    expect(screen.getByText('Card Number')).toBeInTheDocument();
+  });
+
+  it('should handle form submission', async () => {
+    const onSubmit = jest.fn();
+    render(<PaymentForm onSubmit={onSubmit} />);
     
-    // Fill out form and submit
-    // Verify mockOnSubmit was called with correct data
+    // Test form interaction
+    fireEvent.click(screen.getByText('Pay Now'));
+    
+    expect(onSubmit).toHaveBeenCalled();
   });
 });
 ```
 
-### Integration Tests
+## Code Style
 
-Test complete payment flows including API interactions.
+### TypeScript Guidelines
 
-## Documentation
-
-### Code Documentation
-
-- Document all public APIs with JSDoc
-- Include usage examples
-- Document any gotchas or limitations
-- Keep README.md up to date
-
-### API Documentation
+- Use strict TypeScript configuration
+- Prefer `interface` over `type` for object shapes
+- Use descriptive names for types and interfaces
+- Add JSDoc comments for public APIs
 
 ```typescript
 /**
- * Creates a new payment transaction
- * @param request - The payment request details
- * @returns Promise resolving to transaction response
- * @throws {FatZebraError} When payment fails
- * 
- * @example
- * ```typescript
- * const transaction = await client.createPurchase({
- *   amount: 10.00,
- *   currency: 'AUD',
- *   reference: 'ORDER-123',
- *   card_details: cardDetails
- * });
- * ```
+ * Configuration options for payment processing
  */
-async createPurchase(request: PurchaseRequest): Promise<FatZebraResponse<TransactionResponse>> {
-  // Implementation
+interface PaymentConfig {
+  /** Enable 3D Secure authentication */
+  enable3DS?: boolean;
+  /** Enable card tokenization */
+  enableTokenization?: boolean;
+  /** Currency code (default: AUD) */
+  currency?: string;
 }
 ```
 
-### Examples
+### Component Guidelines
 
-- Provide working examples for common use cases
-- Include both TypeScript and JavaScript versions
-- Test examples to ensure they work
-- Show error handling
+- Use functional components with hooks
+- Extract reusable logic into custom hooks
+- Follow React best practices
+- Add proper error boundaries
 
-## Reporting Issues
+```tsx
+import { useState, useCallback } from 'react';
 
-### Bug Reports
+interface PaymentFormProps {
+  onSubmit: (data: PaymentData) => Promise<void>;
+  loading?: boolean;
+}
 
-Include:
-- Clear description of the issue
-- Steps to reproduce
-- Expected vs actual behavior
-- Environment details (Node.js version, browser, etc.)
-- Code samples demonstrating the issue
+export function PaymentForm({ onSubmit, loading = false }: PaymentFormProps) {
+  const [formData, setFormData] = useState<PaymentData>({});
+
+  const handleSubmit = useCallback(async (event: FormEvent) => {
+    event.preventDefault();
+    await onSubmit(formData);
+  }, [formData, onSubmit]);
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* Form content */}
+    </form>
+  );
+}
+```
+
+### Naming Conventions
+
+- **Files**: PascalCase for components, camelCase for utilities
+- **Components**: PascalCase
+- **Functions**: camelCase
+- **Constants**: UPPER_SNAKE_CASE
+- **Types**: PascalCase with descriptive names
+
+## Bug Reports
+
+### Before Reporting
+
+1. **Search Existing Issues**: Check if the bug is already reported
+2. **Test in Latest Version**: Ensure you're using the latest release
+3. **Minimal Reproduction**: Create a minimal example that reproduces the issue
+
+### Bug Report Template
+
+When reporting a bug, include:
+
+- **Environment Details**:
+  - Next.js version
+  - React version
+  - Node.js version
+  - Browser/environment
+
+- **Steps to Reproduce**:
+  1. Clear steps to reproduce the issue
+  2. Expected vs actual behavior
+  3. Error messages or logs
+
+- **Code Examples**:
+  ```typescript
+  // Minimal code that reproduces the issue
+  ```
+
+- **Additional Context**:
+  - Screenshots if applicable
+  - Code samples demonstrating the issue
 
 ### Feature Requests
 
 Include:
-- Use case description
-- Proposed API design
-- Consider backward compatibility
-- Implementation complexity assessment
+- **Use Case Description**: Why is this feature needed?
+- **Proposed API Design**: How should it work?
+- **Backward Compatibility**: Will this break existing code?
+- **Implementation Complexity**: How complex would this be to implement?
 
 ### Issue Templates
 
-Use the provided issue templates for consistency.
+Use the provided issue templates for consistency:
+- Bug Report Template
+- Feature Request Template
+- Security Issue Template
 
 ## Security
 
 ### Sensitive Information
 
-- Never commit credentials or API keys
-- Use environment variables for configuration
-- Be mindful of logging sensitive data
-- Follow OWASP security guidelines
+- **Never commit credentials or API keys**
+- **Use environment variables for configuration**
+- **Be mindful of logging sensitive data**
+- **Follow OWASP security guidelines**
 
 ### Reporting Security Issues
 
 **Do not report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them to: security@example.com
+Instead, please email security-related issues to: **rod.higgins@gmail.com**
 
-Include:
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact assessment
-- Suggested fixes (if any)
+Include in your report:
+- **Description of the vulnerability**
+- **Steps to reproduce**
+- **Potential impact assessment**
+- **Suggested fixes (if any)**
 
 ## Release Process
 
 ### Version Numbering
 
 We follow [Semantic Versioning](https://semver.org/):
-- **MAJOR**: Breaking changes
-- **MINOR**: New features (backward compatible)
-- **PATCH**: Bug fixes (backward compatible)
+- **MAJOR** (1.0.0): Breaking changes
+- **MINOR** (0.1.0): New features (backward compatible)
+- **PATCH** (0.0.1): Bug fixes (backward compatible)
 
 ### Changelog
 
@@ -315,28 +256,90 @@ All notable changes are documented in `CHANGELOG.md` following the [Keep a Chang
 
 ### Release Checklist
 
-- [ ] Update version in `package.json`
-- [ ] Update `CHANGELOG.md`
-- [ ] Run full test suite
-- [ ] Update documentation
-- [ ] Create GitHub release
-- [ ] Publish to npm
+Before releasing:
+- Update version in `package.json`
+- Update `CHANGELOG.md` with changes
+- Run full test suite (`npm run validate`)
+- Update documentation if needed
+- Create GitHub release with release notes
+- Publish to npm registry
+
+### Release Commands
+
+```bash
+# Validate everything before release
+npm run validate
+
+# Build for production
+npm run build
+
+# Publish to npm (runs prepublishOnly script)
+npm publish
+```
 
 ## Getting Help
 
-- **Documentation**: Check the [API documentation](./docs/api.md)
-- **Examples**: Look at the [examples directory](./examples/)
-- **Issues**: Search existing [GitHub issues](https://github.com/rod-higgins/fat-zebra-nextjs/issues)
-- **Discussions**: Start a [GitHub discussion](https://github.com/rod-higgins/fat-zebra-nextjs/discussions)
+### Documentation
+
+- **API Documentation**: [Complete API reference](./guides/api.md)
+- **Migration Guide**: [Upgrading from older versions](./guides/migration.md)
+- **Examples**: [Working examples](./examples/)
+
+### Community Support
+
+- **GitHub Issues**: [Search existing issues](https://github.com/rod-higgins/fat-zebra-nextjs/issues)
+- **GitHub Discussions**: [Start a discussion](https://github.com/rod-higgins/fat-zebra-nextjs/discussions)
+- **Fat Zebra Docs**: [Official Fat Zebra documentation](https://docs.fatzebra.com)
+
+### Support Channels
+
+- **Technical Issues**: GitHub Issues
+- **Feature Discussions**: GitHub Discussions
+- **Security Concerns**: rod.higgins@gmail.com
+- **Fat Zebra Support**: [Fat Zebra official support](https://www.fatzebra.com/support)
 
 ## Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
+Key principles:
+- **Be respectful** and inclusive
+- **Be collaborative** and constructive
+- **Be patient** with newcomers
+- **Focus on what's best** for the community
+
 ## License
 
 By contributing to this project, you agree that your contributions will be licensed under the [MIT License](LICENSE).
 
+### Contribution License Agreement
+
+When you submit a pull request, you're agreeing that:
+- Your contribution is your original work
+- You have the right to license your contribution under the MIT License
+- Your contribution may be redistributed under the MIT License
+
 ---
 
-Thank you for contributing to the Fat Zebra Next.js library! 🎉
+## Thank You!
+
+Thank you for contributing to the Fat Zebra Next.js library! Your contributions help make secure payment processing accessible to developers everywhere.
+
+### Recognition
+
+Contributors are recognized in:
+- **GitHub Contributors**: Automatic recognition via GitHub
+- **Release Notes**: Major contributors mentioned in releases
+- **Documentation**: Contributors credited in appropriate sections
+
+### First-Time Contributors
+
+New to open source? Here are some good first issues:
+- Documentation improvements
+- Adding tests for existing functionality
+- Fixing typos or formatting
+- Adding examples for common use cases
+
+Look for issues labeled `good first issue` or `help wanted` in the [GitHub Issues](https://github.com/rod-higgins/fat-zebra-nextjs/issues).
+
+Happy coding!

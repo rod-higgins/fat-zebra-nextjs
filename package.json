@@ -1,6 +1,6 @@
 {
   "name": "@fwcgovau/fat-zebra-nextjs",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "description": "Fat Zebra payment processing library for Next.js and standalone environments",
   "main": "dist/index.js",
   "module": "dist/index.esm.js",
@@ -57,18 +57,22 @@
     "typescript",
     "payments",
     "credit-card",
-    "ecommerce"
+    "ecommerce",
+    "oauth",
+    "3ds2",
+    "tokenization",
+    "security"
   ],
-  "author": "Your Organization",
+  "author": "Rod Higgins <rod.higgins@gmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/fat-zebra-nextjs.git"
+    "url": "https://github.com/rod-higgins/fat-zebra-nextjs.git"
   },
   "bugs": {
-    "url": "https://github.com/your-org/fat-zebra-nextjs/issues"
+    "url": "https://github.com/rod-higgins/fat-zebra-nextjs/issues"
   },
-  "homepage": "https://github.com/your-org/fat-zebra-nextjs#readme",
+  "homepage": "https://github.com/rod-higgins/fat-zebra-nextjs#readme",
   "dependencies": {
     "@fat-zebra/sdk": "^1.5.9"
   },

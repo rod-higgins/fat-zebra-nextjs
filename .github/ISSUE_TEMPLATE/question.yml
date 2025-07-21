@@ -9,17 +9,17 @@ body:
     attributes:
       value: |
         Before asking a question, please check:
-        - [API Documentation](https://github.com/your-org/fat-zebra-nextjs/blob/main/docs/api.md)
-        - [Migration Guide](https://github.com/your-org/fat-zebra-nextjs/blob/main/docs/migration.md)
-        - [Examples](https://github.com/your-org/fat-zebra-nextjs/tree/main/examples)
-        - [Existing Issues](https://github.com/your-org/fat-zebra-nextjs/issues)
+        - [API Documentation](https://github.com/rod-higgins/fat-zebra-nextjs/blob/main/guides/api.md)
+        - [Migration Guide](https://github.com/rod-higgins/fat-zebra-nextjs/blob/main/guides/migration.md)
+        - [Examples](https://github.com/rod-higgins/fat-zebra-nextjs/tree/main/examples)
+        - [Existing Issues](https://github.com/rod-higgins/fat-zebra-nextjs/issues)
 
   - type: input
     id: version
     attributes:
       label: Library Version
       description: What version of @fwcgovau/fat-zebra-nextjs are you using?
-      placeholder: "0.5.6"
+      placeholder: "0.5.8"
     validations:
       required: true
 
