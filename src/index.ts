@@ -8,7 +8,7 @@ import { FatZebraClient, createFatZebraClient, handleFatZebraResponse } from './
 
 import { FatZebraError, TEST_CARDS, CURRENCIES } from './types';
 import { PaymentForm } from './components/PaymentForm';
-import { usePayment, usePaymentWithRetry } from './hooks/usePayment';
+import { usePayment, usePaymentWithRetry, useOAuthPayment } from './hooks';
 
 // Re-export core client functions
 export { FatZebraClient, createFatZebraClient, handleFatZebraResponse };
@@ -20,7 +20,7 @@ export { FatZebraError };
 export { PaymentForm };
 
 // Re-export React hooks
-export { usePayment, usePaymentWithRetry };
+export { usePayment, usePaymentWithRetry, useOAuthPayment };
 
 // Utility functions
 export {
@@ -68,6 +68,14 @@ export type {
   TransactionType,
 } from './types';
 
+// Re-export OAuth hook types
+export type {
+  UseOAuthPaymentOptions,
+  UseOAuthPaymentResult,
+  OAuthPaymentData,
+  ThreeDSResult,
+} from './hooks';
+
 // Re-export constants
 export { TEST_CARDS, CURRENCIES };
 
@@ -78,6 +86,7 @@ const FatZebraNextJS = {
   handleFatZebraResponse,
   PaymentForm,
   usePayment,
+  useOAuthPayment,
   TEST_CARDS,
   CURRENCIES,
 };

@@ -3,3 +3,10 @@
  */
 
 export { usePayment, usePaymentWithRetry } from './usePayment';
+export { useOAuthPayment } from './useOAuthPayment';
+export type {
+  UseOAuthPaymentOptions,
+  UseOAuthPaymentResult,
+  OAuthPaymentData,
+  ThreeDSResult,
+} from './useOAuthPayment';

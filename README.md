@@ -327,7 +327,11 @@ MIT © [Rod Higgins](https://github.com/rod-higgins/fat-zebra-nextjs/blob/main/L
 
 ## Changelog
 
-### v0.5.8 (Latest)
+### v0.5.9 (Latest)
+
+- Added missing useOAuthPayment hook with tests
+
+### v0.5.8
 
 - Documentation updates
 
